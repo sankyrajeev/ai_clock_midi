@@ -27,7 +27,23 @@ DJM-V10  ──┘                                     └─► Ableton Link (o
 - **MIDI Start** goes out on a downbeat (beat 1 of the bar), so Lightkey's bar
   position matches the decks.
 
-## Setup (macOS)
+## Quick start (double-click)
+
+1. Download the repo: `git clone https://github.com/sankyrajeev/ai_clock_midi`,
+   or use **Code → Download ZIP** on GitHub and unzip it.
+2. In Finder, double-click **`Check Beats.command`** and press play on a deck.
+   Beat lines should appear.
+3. Double-click **`Start ProLink Clock.command`** and leave the window open.
+   In Lightkey, set the tempo source to **MIDI Clock → ProLink Clock**.
+
+The first launch sets everything up by itself, which takes about a minute. If
+macOS says the file "can't be opened because it is from an unidentified
+developer" (this happens with the ZIP download), right-click it → **Open** →
+**Open**. You only need to do that once. To always pass options such as
+`--link` or `--source 1`, edit the `ARGS=()` line in
+`Start ProLink Clock.command`.
+
+## Setup (manual, macOS)
 
 ```bash
 cd ai_clock_midi
