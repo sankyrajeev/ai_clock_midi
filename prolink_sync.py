@@ -447,6 +447,11 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+    if sys.stderr.isatty():  # clear the live status line before each log message
+        for handler in logging.getLogger().handlers:
+            handler.terminator = "\n"
+            fmt = handler.formatter
+            handler.setFormatter(logging.Formatter("\r\033[K" + fmt._fmt, fmt.datefmt))
 
     if args.list_audio:
         from sections import list_audio_devices

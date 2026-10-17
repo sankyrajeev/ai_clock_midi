@@ -346,3 +346,15 @@ def test_virtual_cdj_end_to_end(monkeypatch):
     finally:
         vcdj.close()
         out.close()
+
+
+def test_warns_when_another_dj_link_app_shares_this_mac():
+    tracker = PhraseTracker(lambda e: None, lambda cc, v: None)
+    vcdj = ph.VirtualCdj.__new__(ph.VirtualCdj)  # no sockets needed for the advice text
+    vcdj.local_ip, vcdj.number = "169.254.109.134", 7
+    vcdj.devices = {230: ph.Device(230, "TCS-SHOWKONTROL", "169.254.109.134", 0),
+                    2: ph.Device(2, "CDJ-3000X", "169.254.7.140", 0)}
+    msg = vcdj._no_status_advice()
+    assert "TCS-SHOWKONTROL is running on this Mac" in msg and "CDJ" not in msg
+    vcdj.devices.pop(230)
+    assert "no other DJ Link app" in vcdj._no_status_advice()

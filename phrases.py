@@ -606,6 +606,7 @@ class VirtualCdj:
     startup_wait = 2.5      # seconds to watch the network before claiming a number
     claim_interval = 0.3    # spacing of the claim packets, as real players do
     db_query_port = DB_QUERY_PORT
+    status_timeout = 8.0    # seconds after joining before warning that no status arrives
 
     def __init__(self, tracker: PhraseTracker, number: int = 0, posing_as: int = 0,
                  bind: str = "0.0.0.0", broadcast: Optional[str] = None):
@@ -621,6 +622,7 @@ class VirtualCdj:
         self.alive = True
         self.claim_rejected = False
         self.fetch_queue: Queue = Queue()
+        self.status_seen: set[int] = set()
         self.db_ports: dict[str, int] = {}
         tracker.on_track = lambda st: self.fetch_queue.put(st)
 
@@ -682,13 +684,27 @@ class VirtualCdj:
         time.sleep(self.startup_wait)  # let every device announce itself before picking a number
         self._claim(ip, bcast)
         log.info("Joined the network as device %d (%s, broadcast %s)", self.number, self.local_ip, bcast)
+        joined, warned = time.monotonic(), False
         while self.alive:
             pkt = keepalive_packet(self.NAME, self.number, self.mac, ip, max(1, len(self.devices)))
             try:
                 self.announce_sock.sendto(pkt, (bcast, ANNOUNCE_PORT))
             except OSError as e:
                 log.warning("keep-alive failed: %s", e)
+            if not warned and not self.status_seen and time.monotonic() - joined > self.status_timeout:
+                warned = True
+                log.warning(self._no_status_advice())
             time.sleep(1.5)
+
+    def _no_status_advice(self) -> str:
+        """Explain why no player status is arriving, naming any app sharing this Mac."""
+        neighbours = sorted({d.name for d in self.devices.values()
+                             if d.ip == self.local_ip and d.number != self.number})
+        if neighbours:
+            return (f"Not receiving player status. {', '.join(neighbours)} is running on this Mac and "
+                    "is probably taking the status packets. Quit it, then restart this app.")
+        return ("Not receiving player status. Check that no other DJ Link app (rekordbox, Bridge, "
+                "ShowKontrol) is running on this Mac, then restart this app.")
 
     def _claim(self, ip: bytes, bcast: str) -> None:
         send = lambda pkt: self.announce_sock.sendto(pkt, (bcast, ANNOUNCE_PORT))  # noqa: E731
@@ -727,6 +743,9 @@ class VirtualCdj:
                 return
             st = parse_status(data, time.monotonic())
             if st and 1 <= st.device <= 6:
+                if st.device not in self.status_seen:
+                    self.status_seen.add(st.device)
+                    log.info("Receiving status from player %d", st.device)
                 self.tracker.on_status(st)
 
     # -- analysis downloads ----------------------------------------------------
