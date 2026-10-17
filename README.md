@@ -1,4 +1,4 @@
-# Pro DJ Link → Lightkey tempo sync + section cues
+# Pro DJ Link → Lightkey tempo sync + phrase cues
 
 Turns the beats coming off a **CDJ‑3000X / DJM‑V10** Pro DJ Link network into a
 **phase‑locked MIDI clock** (and optionally **Ableton Link**) that Lightkey can
@@ -8,8 +8,18 @@ including pitch-fader changes and master hand-offs, and stay on the bar.
 ```
 CDJ-3000X ─┐                     UDP 50001 beat packets
            ├─ switch ── Mac ──►  prolink_sync.py ──► virtual MIDI "ProLink Clock" ──► Lightkey
-DJM-V10  ──┘                                     └─► Ableton Link (optional)     ──► Lightkey
+DJM-V10  ──┘                                     ├─► Ableton Link (optional)     ──► Lightkey
+                                                 └─► MIDI "ProLink Cues": intro / build / drop /
+                                                     breakdown / outro from rekordbox phrases
 ```
+
+It also fires **lighting cues for each part of the track**, using rekordbox's
+phrase analysis read straight off the CDJs over the same network cable (see
+[Phrase cues](#phrase-cues-over-the-network-recommended)). The older
+[USB-audio detector](#usb-audio-backup-section-cues-from-the-mixer-audio) is
+kept as a backup and as a fallback for tracks without phrase data. A snapshot
+of the project from before the network version is on the `backup-usb-audio`
+branch.
 
 ## How it works
 
@@ -33,10 +43,17 @@ DJM-V10  ──┘                                     └─► Ableton Link (o
    or use **Code → Download ZIP** on GitHub and unzip it.
 2. In Finder, double-click **`Check Beats.command`** and press play on a deck.
    Beat lines should appear.
-3. Double-click **`Start ProLink Clock.command`** and leave the window open.
-   In Lightkey, set the tempo source to **MIDI Clock → ProLink Clock**.
-   Or use **`Start Clock + Cues.command`** to also get drop/build/breakdown
-   cues from the mixer audio (see below).
+3. Double-click **`Start Clock + Phrases (network).command`** and leave the
+   window open. In Lightkey, set the tempo source to **MIDI Clock → ProLink
+   Clock** and MIDI-learn the cues from **ProLink Cues**.
+
+| Launcher | What it does |
+|---|---|
+| `Start Clock + Phrases (network).command` | **Recommended.** Clock + phrase cues over the DJ Link network |
+| `Demo Cues (no decks).command` | Cycles through every cue at 128 BPM so you can MIDI-learn them in Lightkey |
+| `Start ProLink Clock.command` | Clock only |
+| `Start Clock + Cues (USB backup).command` | Clock + cues detected from the DJM's audio over USB |
+| `Check Beats.command` | Shows the beat packets arriving from the decks |
 
 The first launch sets everything up by itself, which takes about a minute. If
 macOS says the file "can't be opened because it is from an unidentified
@@ -45,10 +62,53 @@ developer" (this happens with the ZIP download), right-click it → **Open** →
 `--link` or `--source 1`, edit the `ARGS=(...)` line in the launcher.
 After a `git pull` the launchers install any new requirements by themselves.
 
-## Section cues: drops, builds, breakdowns
+## Phrase cues over the network (recommended)
 
-With `--cues` (or **`Start Clock + Cues.command`**) the tool also listens to the
-**mixer's master audio** and tells Lightkey what the music is doing:
+With `--phrases` (or **`Start Clock + Phrases (network).command`**) the tool
+joins the Pro DJ Link network as a virtual player, the same way rekordbox or
+PRO DJ LINK Bridge do. For each track that gets loaded it downloads rekordbox's
+**phrase analysis** from the CDJ, then follows the playhead of the master deck
+and fires a cue **on the exact beat** each phrase starts. There's no audio
+cable and no detection delay. `--latency-ms 30` fires cues (and the clock)
+30 ms early to make up for DMX and fixture lag.
+
+| Cue | rekordbox phrase | MIDI (ch 1, port **ProLink Cues**) |
+|---|---|---|
+| **Breakdown** | Down | note 36 |
+| **Build** | Up | note 37 |
+| **Drop** | Chorus | note 38 |
+| **Phrase** | every 8 bars into a section | note 39 |
+| **Bar** | every downbeat | note 40 |
+| **Intro** / **Outro** | Intro / Outro | notes 41 / 42 |
+| **Verse** / **Bridge** | (mid/low-energy tracks) | notes 43 / 44 |
+| **Pre-drop** | one bar before a Chorus (good for a blackout) | note 45 |
+| **New track** | the followed deck changes track | note 46 |
+| Section energy | Down 25%, Intro 35%, Up 60% … Chorus 100% | CC 20 |
+| Build progress | ramps 0→127 through each Up section | CC 23 |
+
+Notes 36–40 and CCs 20/23 mean the same thing as in the USB-audio mode, so one
+Lightkey mapping works for both.
+
+**Requirements and behaviour:**
+
+- Analyse tracks in rekordbox with phrase analysis on. That's the coloured
+  phrase bar above the waveform, and it's on by default in rekordbox 6/7.
+  Export to USB as usual.
+- It follows the **tempo master** deck (`--follow on-air` or `--follow 2` to
+  change). On a master hand-off it announces where the new deck is. Hot-cue
+  jumps announce the new section immediately.
+- It takes a free device number from 7 up, so all six player slots stay free.
+  Pick one with `--player-number`.
+- To run the USB-audio detector as a fallback for tracks with no phrase data,
+  add `--cues` (edit `ARGS` in the launcher to `ARGS=(--phrases --cues)`).
+- PRO DJ LINK Bridge isn't needed. If it runs on the same Mac, the two may
+  fight over the status port. Quit Bridge if decks don't show up.
+
+## USB-audio backup: section cues from the mixer audio
+
+With `--cues` (or **`Start Clock + Cues (USB backup).command`**) the tool
+listens to the **mixer's master audio** and tells Lightkey what the music is
+doing:
 
 | Event | When it fires | MIDI (ch 1, port **ProLink Cues**) |
 |---|---|---|
@@ -142,12 +202,23 @@ Then use beat-synced effects / BPM-based cue timing in Lightkey as usual.
 | `--no-midi` | Link only |
 | `--midi-port NAME` / `--existing-port` | Port name, or send to an existing port such as `IAC Driver Bus 1` |
 | `--no-transport` | Clock ticks only, no Start/Stop |
-| `--latency-ms N` | Fire the clock N ms early to make up for DMX/fixture latency |
+| `--latency-ms N` | Fire the clock and phrase cues N ms early to make up for DMX/fixture latency |
 | `--stop-after S` | Send MIDI Stop after S seconds with no beats (default: keep running at the last tempo) |
 | `--monitor` | Print every beat packet from every device |
 | `--simulate BPM` | Fake a deck locally to test the Lightkey side without the gear |
+| `--phrases` | Phrase cues from rekordbox analysis over the network |
+| `--follow master\|on-air\|N` | Which deck drives the phrase cues (default `master`) |
+| `--player-number N` / `--pose-as N` | Device number to claim / player number shown to the CDJ database |
+| `--demo` | Fake track through the phrase cues, for MIDI-learning |
+| `--cues` | Cues from the mixer audio over USB (fallback when used with `--phrases`) |
 
 ## Troubleshooting
+
+- **Phrase cues: "no phrase analysis for this track"**: re-analyse the track in
+  rekordbox with phrase detection on and re-export it. Tracks streamed or played
+  from a non-rekordbox USB have no phrase data, so use `--cues` as the fallback.
+- **Phrase cues: decks never show up**: quit PRO DJ LINK Bridge / rekordbox on
+  the Mac and restart the tool. Run with `-v` to see what's happening.
 
 - **"Cannot listen on UDP 50001"**: another app has the port without sharing
   it. Quit that app; this tool doesn't need Bridge to be running.

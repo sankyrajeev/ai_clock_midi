@@ -419,7 +419,19 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="just print every beat packet from every device, no output")
     ap.add_argument("--simulate", type=float, metavar="BPM",
                     help="generate fake beat packets at BPM locally (testing without gear)")
-    cues = ap.add_argument_group("section cues (breakdown / build / drop from the mixer's audio)")
+    net = ap.add_argument_group("phrase cues over the network (rekordbox phrase analysis, no audio cable)")
+    net.add_argument("--phrases", action="store_true",
+                     help="join the DJ Link network and cue lights from each track's rekordbox phrases")
+    net.add_argument("--follow", default="master",
+                     help="deck to follow: master (default), on-air, or a player number")
+    net.add_argument("--player-number", type=int, default=0,
+                     help="device number to claim (default: first free from 7 up)")
+    net.add_argument("--pose-as", type=int, default=0,
+                     help="player number to present to the CDJ database (default: automatic)")
+    net.add_argument("--broadcast", help="DJ Link broadcast address (default: detected)")
+    net.add_argument("--demo", action="store_true",
+                     help="play a fake 128 BPM track through the phrase cues (MIDI-learn without decks)")
+    cues = ap.add_argument_group("section cues from the mixer's audio over USB (backup / fallback)")
     cues.add_argument("--cues", action="store_true",
                       help="listen to the mixer audio and send section cues + levels as MIDI")
     cues.add_argument("--cue-port", default="ProLink Cues",
@@ -489,8 +501,32 @@ def main(argv: Optional[list[str]] = None) -> int:
         log.error("Nothing to output: enable MIDI and/or --link")
         return 1
 
-    audio = cue_out = None
-    if args.cues:
+    audio = cue_out = tracker = vcdj = None
+    if args.phrases or args.demo:
+        try:
+            from phrases import CueMidi, PhraseTracker, VirtualCdj, run_demo
+            gate = (lambda: tracker.has_phrases()) if args.cues else None
+            cue_out = CueMidi(args.cue_port, args.existing_port, gate=gate)
+            tracker = PhraseTracker(cue_out.event, cue_out.level, follow=args.follow,
+                                    lead=args.latency_ms / 1000.0)
+            if args.demo:
+                threading.Thread(target=run_demo, args=(tracker, 128.0, stop), daemon=True).start()
+                log.info("Demo: fake track Intro > Up > Chorus > Down > Up > Chorus > Outro at 128 BPM")
+            else:
+                vcdj = VirtualCdj(tracker, number=args.player_number, posing_as=args.pose_as,
+                                  bind=args.bind, broadcast=args.broadcast)
+                vcdj.start()
+            if args.cues:
+                from sections import AudioInput, SectionDetector
+                channels = [int(c) for c in args.audio_channels.split(",")]
+                audio = AudioInput(args.audio_device, channels,
+                                   lambda sr: SectionDetector(sr, cue_out.audio_event, cue_out.audio_levels))
+                audio.start()
+                log.info("USB audio detection is the fallback for tracks without phrase data")
+        except OSError as e:
+            log.error("Could not start phrase cues: %s (is another DJ Link app using ports 50000/50002?)", e)
+            return 1
+    elif args.cues:
         try:
             from sections import AudioInput, CueOutput, SectionDetector
             cue_out = CueOutput(args.cue_port, args.existing_port)
@@ -508,7 +544,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     last_status = [""]
 
     def status(line: str) -> None:
-        if audio:
+        if tracker:
+            line += f"  [{tracker.current()}]"
+        elif audio:
             line += f"  [{(audio.detector.state or 'listening').upper()}]"
         if sys.stdout.isatty():
             print("\r" + line.ljust(len(last_status[0])), end="", flush=True)
@@ -527,6 +565,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             data, _ = sock.recvfrom(2048)
             beat = parse_beat(data, time.monotonic())
             if beat:
+                if tracker and not args.demo and not beat.is_mixer:
+                    tracker.on_beat(beat.device, beat.beat_in_bar, beat.bpm, beat.received)
                 engine.feed(beat)
     except KeyboardInterrupt:
         print()
@@ -535,6 +575,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         engine.close()
         if audio:
             audio.close()
+        if vcdj:
+            vcdj.close()
         if cue_out:
             cue_out.close()
         sock.close()
