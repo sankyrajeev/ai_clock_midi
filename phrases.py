@@ -126,7 +126,8 @@ class CdjStatus:
 
     @property
     def track_key(self) -> Optional[tuple[int, int, int]]:
-        if self.track_type != 1 or self.rekordbox_id == 0 or self.track_player == 0:
+        # 1 = rekordbox track; 2 = unanalysed file (a CDJ-3000 still builds a beat grid for it)
+        if self.track_type not in (1, 2) or self.rekordbox_id == 0 or self.track_player == 0:
             return None
         return (self.track_player, self.slot, self.rekordbox_id)
 
@@ -271,6 +272,15 @@ class DbClient:
             return None
         return args[3]
 
+    def beat_grid(self, slot: int, track_type: int, rekordbox_id: int) -> Optional[bytes]:
+        self.txid += 1
+        dmst = (self.posing_as << 24) | (8 << 16) | (slot << 8) | track_type
+        self.sock.sendall(encode_message(self.txid, 0x2204, [dmst, rekordbox_id]))
+        _, kind, args = self.rd.message()
+        if kind != 0x4602 or len(args) < 4 or not args[2]:
+            return None
+        return args[3]
+
     def close(self) -> None:
         try:
             self.sock.sendall(encode_message(0xFFFFFFFE, 0x0100, []))
@@ -304,6 +314,7 @@ class TrackPhrases:
     mood: int
     phrases: list[Phrase]
     end_beat: int
+    source: str = "rekordbox"   # "rekordbox" phrases, or "waveform" analysis
 
     def index_at(self, beat: int) -> Optional[int]:
         """Index of the phrase playing at `beat`, or None before the first / after the end."""
@@ -464,7 +475,7 @@ class PhraseTracker:
             if not tp or not deck or deck.beat is None:
                 return "no phrase data" if self.followed else "waiting"
             i = tp.index_at(deck.beat)
-            return f"deck {self.followed}: {tp.phrases[i].label if i is not None else '-'}"
+            return f"deck {self.followed}: {tp.phrases[i].label if i is not None else '-'} ({tp.source})"
 
     # -- internals ----------------------------------------------------------
 
@@ -738,10 +749,10 @@ class VirtualCdj:
                     log.debug("phrase download attempt %d for %s failed: %s", attempt + 1, key, e)
                     time.sleep(1.0)
             if phrases:
-                log.info("Deck %d: %d phrases (%s)", st.device, len(phrases.phrases),
+                log.info("Deck %d: %d sections from %s (%s)", st.device, len(phrases.phrases), phrases.source,
                          " / ".join(p.label for p in phrases.phrases[:8]))
             else:
-                log.info("Deck %d: no phrase analysis for this track (audio fallback if enabled)", st.device)
+                log.info("Deck %d: no phrase or waveform data for this track (audio fallback if enabled)", st.device)
             self.tracker.set_analysis(key, phrases)
 
     def _fetch(self, st: CdjStatus) -> Optional[TrackPhrases]:
@@ -752,10 +763,32 @@ class VirtualCdj:
         posing = self.posing_as or (self.number if 1 <= self.number <= 4 else st.track_player)
         client = DbClient(source.ip, posing, query_port=self.db_query_port)
         try:
-            blob = client.anlz_tag(st.slot, st.track_type, st.rekordbox_id, "PSSI", "EXT")
+            if st.track_type == 1:
+                blob = client.anlz_tag(st.slot, st.track_type, st.rekordbox_id, "PSSI", "EXT")
+                if blob:
+                    tp = parse_pssi(blob)
+                    if tp.phrases:
+                        return tp
+            return self._from_waveform(client, st)
         finally:
             client.close()
-        return parse_pssi(blob) if blob else None
+
+    @staticmethod
+    def _from_waveform(client: "DbClient", st: CdjStatus) -> Optional[TrackPhrases]:
+        """No phrase analysis: work the sections out from the waveform instead."""
+        import waveform
+
+        grid_blob = client.beat_grid(st.slot, st.track_type, st.rekordbox_id)
+        grid = waveform.parse_beat_grid(grid_blob) if grid_blob else []
+        if not grid:
+            return None
+        for tag, ext in waveform.WAVEFORM_TAGS:
+            blob = client.anlz_tag(st.slot, st.track_type, st.rekordbox_id, tag, ext)
+            bands = waveform.parse_waveform(blob) if blob else None
+            if bands is not None and len(bands.low):
+                log.debug("analysing %s waveform (%d entries)", tag, len(bands.low))
+                return waveform.analyse(bands, grid)
+        return None
 
 
 # --------------------------------------------------------------------------

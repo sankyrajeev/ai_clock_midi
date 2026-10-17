@@ -78,8 +78,9 @@ def test_pssi_mid_mood_labels():
 class FakeDbServer:
     """Speaks just enough of the dbserver protocol to serve one PSSI tag."""
 
-    def __init__(self, tags):
-        self.tags = tags  # {(slot, rekordbox_id): bytes}
+    def __init__(self, tags, grids=None):
+        self.tags = tags  # {(slot, rekordbox_id): PSSI bytes} or {(slot, rekordbox_id, "PWV7"): bytes}
+        self.grids = grids or {}  # {(slot, rekordbox_id): beat grid bytes}
         self.requests = []
         self.query = socket.socket()
         self.query.bind(("127.0.0.1", 0))
@@ -116,8 +117,14 @@ class FakeDbServer:
                         c.sendall(self._reply(txid, 0x4000, [0, 3]))
                     elif kind == 0x2C04:
                         dmst, rbid, tag, ext = args
-                        data = self.tags.get(((dmst >> 8) & 0xFF, rbid), b"")
-                        c.sendall(self._tag_reply(txid, data))
+                        slot = (dmst >> 8) & 0xFF
+                        name = tag.to_bytes(4, "big")[::-1].decode()
+                        key = (slot, rbid) if name == "PSSI" else (slot, rbid, name)
+                        c.sendall(self._tag_reply(txid, self.tags.get(key, b"")))
+                    elif kind == 0x2204:
+                        dmst, rbid = args
+                        grid = self.grids.get(((dmst >> 8) & 0xFF, rbid), b"")
+                        c.sendall(self._tag_reply(txid, grid, kind=0x4602, req=0x2204, prefix=False))
                     elif kind == 0x0100:
                         return
             except ConnectionError:
@@ -128,11 +135,11 @@ class FakeDbServer:
         return ph.encode_message(txid, kind, nums)
 
     @staticmethod
-    def _tag_reply(txid, data):
-        blob = struct.pack(">I", len(data)) + data if data else b""
+    def _tag_reply(txid, data, kind=0x4F02, req=0x2C04, prefix=True):
+        blob = (struct.pack(">I", len(data)) + data if prefix else data) if data else b""
         types = bytes([6, 6, 6, 3, 6]).ljust(12, b"\x00")
-        out = (ph._num(ph.MSG_MAGIC) + ph._num(txid) + ph._num(0x4F02, 2) + ph._num(5, 1) + ph._blob(types)
-               + ph._num(0x2C04) + ph._num(0) + ph._num(len(blob)))
+        out = (ph._num(ph.MSG_MAGIC) + ph._num(txid) + ph._num(kind, 2) + ph._num(5, 1) + ph._blob(types)
+               + ph._num(req) + ph._num(0) + ph._num(len(blob)))
         if blob:
             out += ph._blob(blob)
         return out + ph._num(0)

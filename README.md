@@ -89,11 +89,30 @@ cable and no detection delay. `--latency-ms 30` fires cues (and the clock)
 Notes 36–40 and CCs 20/23 mean the same thing as in the USB-audio mode, so one
 Lightkey mapping works for both.
 
+### Where the sections come from
+
+The app picks the best source for each track by itself:
+
+| | Source | Used when | Timing |
+|---|---|---|---|
+| 1 | **rekordbox phrases** | the DJ ran phrase analysis | exact, on the beat |
+| 2 | **Waveform analysis** | no phrase data, but the track came from a rekordbox export (or a CDJ-3000 analysed the file itself) | exact, on the beat, worked out when the track loads |
+| 3 | **Live audio** (`--cues`) | anything else, e.g. streaming | live, a moment after it happens |
+
+**Waveform analysis** covers guest DJs who never turned on phrase analysis.
+When a track loads, the app downloads its beat grid and its detailed waveform
+from the CDJ: the CDJ-3000's 3-band waveform where it exists, otherwise the
+colour or mono one. It then goes through the track bar by bar. Kick and bass
+gone means a breakdown, highs climbing towards a drop means a build, and full
+energy means a drop. Section starts are snapped to phrase lines. The result
+feeds the same cue engine, so cues still land on the exact beat. The status
+line shows `(rekordbox)` or `(waveform)` next to the current section.
+
 **Requirements and behaviour:**
 
-- Analyse tracks in rekordbox with phrase analysis on. That's the coloured
-  phrase bar above the waveform, and it's on by default in rekordbox 6/7.
-  Export to USB as usual.
+- Best results come from tracks analysed in rekordbox with phrase analysis on.
+  That's the coloured phrase bar above the waveform, and it's on by default in
+  rekordbox 6/7. Without it, waveform analysis takes over automatically.
 - It follows the **tempo master** deck (`--follow on-air` or `--follow 2` to
   change). On a master hand-off it announces where the new deck is. Hot-cue
   jumps announce the new section immediately.
@@ -214,9 +233,9 @@ Then use beat-synced effects / BPM-based cue timing in Lightkey as usual.
 
 ## Troubleshooting
 
-- **Phrase cues: "no phrase analysis for this track"**: re-analyse the track in
-  rekordbox with phrase detection on and re-export it. Tracks streamed or played
-  from a non-rekordbox USB have no phrase data, so use `--cues` as the fallback.
+- **"no phrase or waveform data for this track"**: the player had nothing to
+  send for that track, which is typical for streaming. Use the live-audio
+  fallback (`--cues`) for those.
 - **Phrase cues: decks never show up**: quit PRO DJ LINK Bridge / rekordbox on
   the Mac and restart the tool. Run with `-v` to see what's happening.
 
