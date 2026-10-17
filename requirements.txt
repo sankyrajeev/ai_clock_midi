@@ -1,4 +1,7 @@
 mido>=1.3
 python-rtmidi>=1.5
+# Section cues (--cues):
+numpy>=1.21
+sounddevice>=0.4.6
 # Optional, only for --link (Ableton Link output):
 # LinkPython-extern>=1.1

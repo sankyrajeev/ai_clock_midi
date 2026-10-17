@@ -296,8 +296,10 @@ class LinkOutput:
 class Engine:
     def __init__(self, selector: SourceSelector, midi: Optional[MidiClockOutput],
                  link: Optional[LinkOutput], latency: float,
-                 stop_after: Optional[float], on_status: Callable[[str], None]):
+                 stop_after: Optional[float], on_status: Callable[[str], None],
+                 on_beat: Optional[Callable[[Beat], None]] = None):
         self.selector = selector
+        self.on_beat = on_beat
         self.midi = midi
         self.link = link
         self.pll = ClockPLL(latency)
@@ -319,6 +321,8 @@ class Engine:
             self.lock.notify()
         if self.link:
             self.link.on_beat(beat.bpm, beat.beat_in_bar)
+        if self.on_beat:
+            self.on_beat(beat)
         self.on_status(
             f"{beat.name:<10} dev {beat.device:<2} beat {beat.beat_in_bar}  "
             f"{beat.bpm:7.2f} BPM  (track {beat.track_bpm:.2f}, pitch {(beat.pitch - 1) * 100:+.2f}%)"
@@ -415,11 +419,32 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="just print every beat packet from every device, no output")
     ap.add_argument("--simulate", type=float, metavar="BPM",
                     help="generate fake beat packets at BPM locally (testing without gear)")
+    cues = ap.add_argument_group("section cues (breakdown / build / drop from the mixer's audio)")
+    cues.add_argument("--cues", action="store_true",
+                      help="listen to the mixer audio and send section cues + levels as MIDI")
+    cues.add_argument("--cue-port", default="ProLink Cues",
+                      help="MIDI port for cues (default: %(default)s)")
+    cues.add_argument("--audio-device", help="audio input name or number (default: a DJM if attached)")
+    cues.add_argument("--audio-channels", default="1,2",
+                      help="input channels carrying the master, 1-based (default: %(default)s)")
+    cues.add_argument("--list-audio", action="store_true", help="list audio inputs and exit")
+    cues.add_argument("--analyze", metavar="WAV",
+                      help="print the sections detected in a recorded WAV file and exit")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+
+    if args.list_audio:
+        from sections import list_audio_devices
+        list_audio_devices()
+        return 0
+    if args.analyze:
+        from sections import analyze_file
+        for t, event in analyze_file(args.analyze):
+            print(f"{int(t // 60):3d}:{t % 60:05.2f}  {event.upper()}")
+        return 0
 
     try:
         sock = open_beat_socket(args.bind)
@@ -464,16 +489,35 @@ def main(argv: Optional[list[str]] = None) -> int:
         log.error("Nothing to output: enable MIDI and/or --link")
         return 1
 
+    audio = cue_out = None
+    if args.cues:
+        try:
+            from sections import AudioInput, CueOutput, SectionDetector
+            cue_out = CueOutput(args.cue_port, args.existing_port)
+            channels = [int(c) for c in args.audio_channels.split(",")]
+            audio = AudioInput(args.audio_device, channels,
+                               lambda sr: SectionDetector(sr, cue_out.event, cue_out.levels))
+            audio.start()
+        except ImportError as e:
+            log.error("--cues needs numpy and sounddevice (pip install -r requirements.txt): %s", e)
+            return 1
+        except Exception as e:  # noqa: BLE001 - audio backends raise assorted errors
+            log.error("Could not start section cues: %s", e)
+            return 1
+
     last_status = [""]
 
     def status(line: str) -> None:
+        if audio:
+            line += f"  [{(audio.detector.state or 'listening').upper()}]"
         if sys.stdout.isatty():
             print("\r" + line.ljust(len(last_status[0])), end="", flush=True)
             last_status[0] = line
 
     engine = Engine(SourceSelector(args.source), midi, link,
                     latency=args.latency_ms / 1000.0,
-                    stop_after=args.stop_after or None, on_status=status)
+                    stop_after=args.stop_after or None, on_status=status,
+                    on_beat=(lambda b: audio.detector.on_beat(b.beat_in_bar, b.received)) if audio else None)
     clock_thread = threading.Thread(target=engine.run_clock, daemon=True)
     clock_thread.start()
 
@@ -489,6 +533,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     finally:
         stop.set()
         engine.close()
+        if audio:
+            audio.close()
+        if cue_out:
+            cue_out.close()
         sock.close()
     return 0
 

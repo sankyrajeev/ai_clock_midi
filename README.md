@@ -1,4 +1,4 @@
-# Pro DJ Link → Lightkey tempo sync
+# Pro DJ Link → Lightkey tempo sync + section cues
 
 Turns the beats coming off a **CDJ‑3000X / DJM‑V10** Pro DJ Link network into a
 **phase‑locked MIDI clock** (and optionally **Ableton Link**) that Lightkey can
@@ -35,13 +35,70 @@ DJM-V10  ──┘                                     └─► Ableton Link (o
    Beat lines should appear.
 3. Double-click **`Start ProLink Clock.command`** and leave the window open.
    In Lightkey, set the tempo source to **MIDI Clock → ProLink Clock**.
+   Or use **`Start Clock + Cues.command`** to also get drop/build/breakdown
+   cues from the mixer audio (see below).
 
 The first launch sets everything up by itself, which takes about a minute. If
 macOS says the file "can't be opened because it is from an unidentified
 developer" (this happens with the ZIP download), right-click it → **Open** →
 **Open**. You only need to do that once. To always pass options such as
-`--link` or `--source 1`, edit the `ARGS=()` line in
-`Start ProLink Clock.command`.
+`--link` or `--source 1`, edit the `ARGS=(...)` line in the launcher.
+After a `git pull` the launchers install any new requirements by themselves.
+
+## Section cues: drops, builds, breakdowns
+
+With `--cues` (or **`Start Clock + Cues.command`**) the tool also listens to the
+**mixer's master audio** and tells Lightkey what the music is doing:
+
+| Event | When it fires | MIDI (ch 1, port **ProLink Cues**) |
+|---|---|---|
+| **Breakdown** | kick/bass gone for ~2 s | note 36 (C1) |
+| **Build** | during a breakdown, the highs climb steadily (risers, snare rolls) | note 37 |
+| **Drop** | the kick and bass slam back in, ~70 ms after the hit | note 38 |
+| **Phrase** | every 8 bars after a drop (on the downbeat, from the CDJ beat grid) | note 39 |
+| **Bar** | every downbeat | note 40 |
+| Energy / Bass / Highs / Build progress | continuously, 0–127 | CC 20 / 21 / 22 / 23 |
+
+It watches for the kick's **punch**, not just bass level. A breakdown that
+keeps a sub-bass or bassline still counts, and a kick roll at the end of a
+build doesn't fire the drop early. Every level is relative to the track's own
+loud parts, so fader moves and quieter tracks don't set it off.
+
+### Getting the audio in
+
+The DJM‑V10 is also a USB audio interface. Connect its USB port to the Mac.
+The tool picks any input with "DJM" in its name automatically. In the DJM's
+settings utility, set the **USB send / mixer audio output** for the first pair
+of channels to **Master** (or REC OUT). If the master arrives on other
+channels, pass e.g. `--audio-channels 13,14`. `--list-audio` shows every input
+and its channel count. The first time, macOS asks whether Terminal may use the
+microphone (audio input). Click **Allow**.
+
+### In Lightkey
+
+Keep the tempo source on **MIDI Clock → ProLink Clock**. Then use MIDI learn on
+whatever should react, triggering it from **ProLink Cues**:
+
+- Drop → your big full-rig cue (strobes, all colours, fast chases)
+- Breakdown → slow, dim, single-colour wash
+- Build → a cue that ramps; map **CC 23 (build progress)** to intensity or
+  strobe speed so it climbs with the riser
+- Phrase → step to the next look every 8 bars so the drop section doesn't go stale
+- CC 20 (energy) → master dimmer or effect size
+
+### Tuning on a recording
+
+Record a mix as WAV and see what it would have fired:
+
+```bash
+python3 prolink_sync.py --analyze my_set.wav
+  0:33.13  BREAKDOWN
+  0:45.07  BUILD
+  1:00.07  DROP
+```
+
+The thresholds live in `Tuning` at the top of `sections.py`, e.g.
+`break_hold` (seconds without kick before a breakdown) and `build_slope`.
 
 ## Setup (manual, macOS)
 
