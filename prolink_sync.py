@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 import socket
 import struct
 import sys
@@ -550,11 +551,15 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     def status(line: str) -> None:
         if tracker:
-            line += f"  [{tracker.current()}]"
+            line = f"[{tracker.current()}]  " + line
         elif audio:
             line += f"  [{(audio.detector.state or 'listening').upper()}]"
         if sys.stdout.isatty():
-            print("\r" + line.ljust(len(last_status[0])), end="", flush=True)
+            # Keep it on one row: a line wider than the window wraps and \r can't rewind it.
+            width = shutil.get_terminal_size((100, 20)).columns - 1
+            if len(line) > width:
+                line = line[:width - 1] + "…"
+            print("\r\033[K" + line, end="", flush=True)
             last_status[0] = line
 
     engine = Engine(SourceSelector(args.source), midi, link,
