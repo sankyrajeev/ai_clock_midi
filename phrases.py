@@ -270,6 +270,35 @@ class DbClient:
             return None
         return args[3]
 
+    def metadata(self, slot: int, track_type: int, rekordbox_id: int) -> dict:
+        """Title, artist, key, genre, duration (s) and tempo of a track, from the player's database."""
+        self.txid += 1
+        dmst = (self.posing_as << 24) | (1 << 16) | (slot << 8) | track_type
+        kind_req = 0x2002 if track_type == 1 else 0x2202  # rekordbox track vs. unanalysed file
+        self.sock.sendall(encode_message(self.txid, kind_req, [dmst, rekordbox_id]))
+        _, kind, args = self.rd.message()
+        if kind != 0x4000 or len(args) < 2 or args[1] in (0, 0xFFFFFFFF):
+            return {}
+        count = args[1]
+        self.txid += 1
+        self.sock.sendall(encode_message(self.txid, 0x3000, [dmst, 0, count, 0, count, 0]))
+        info: dict = {}
+        fields = {0x04: "title", 0x07: "artist", 0x02: "album", 0x0F: "key", 0x06: "genre"}
+        for _ in range(count + 2):  # header, the items, footer
+            _, kind, args = self.rd.message()
+            if kind == 0x4201:
+                break
+            if kind != 0x4101 or len(args) < 7:
+                continue
+            item = args[6] & 0xFFFF
+            if item in fields and isinstance(args[3], str):
+                info[fields[item]] = args[3]
+            elif item == 0x0B:
+                info["duration"] = args[1]
+            elif item == 0x0D:
+                info["tempo"] = args[1] / 100.0
+        return info
+
     def beat_grid(self, slot: int, track_type: int, rekordbox_id: int) -> Optional[bytes]:
         self.txid += 1
         dmst = (self.posing_as << 24) | (8 << 16) | (slot << 8) | track_type
@@ -407,6 +436,8 @@ class PhraseTracker:
         self.decks: dict[int, Deck] = {}
         self.analysis: dict[tuple[int, int, int], Optional[TrackPhrases]] = {}
         self.waveforms: dict[tuple[int, int, int], object] = {}  # waveform.Bands, for the screen
+        self.grids: dict[tuple[int, int, int], list] = {}        # waveform.GridBeat lists
+        self.meta: dict[tuple[int, int, int], dict] = {}         # title, artist, key ...
         self.lock = threading.RLock()
         self.followed: Optional[int] = None
         self.announced: Optional[tuple] = None   # (deck, track_key, phrase index) last announced
@@ -881,6 +912,12 @@ class VirtualCdj:
         posing = self.posing_as or (self.number if 1 <= self.number <= 4 else st.track_player)
         client = DbClient(source.ip, posing, query_port=self.db_query_port)
         try:
+            try:
+                self.tracker.meta[st.track_key] = client.metadata(st.slot, st.track_type, st.rekordbox_id)
+            except (OSError, ValueError, ConnectionError) as e:
+                log.debug("no metadata for %s: %s", st.track_key, e)
+                client.close()
+                client = DbClient(source.ip, posing, query_port=self.db_query_port)  # start clean
             phrases = None
             if st.track_type == 1:
                 blob = client.anlz_tag(st.slot, st.track_type, st.rekordbox_id, "PSSI", "EXT")
@@ -899,6 +936,8 @@ class VirtualCdj:
 
         grid_blob = client.beat_grid(st.slot, st.track_type, st.rekordbox_id)
         grid = waveform.parse_beat_grid(grid_blob) if grid_blob else []
+        if grid:
+            self.tracker.grids[st.track_key] = grid
         for tag, ext in waveform.WAVEFORM_TAGS:
             blob = client.anlz_tag(st.slot, st.track_type, st.rekordbox_id, tag, ext)
             bands = waveform.parse_waveform(blob) if blob else None
@@ -932,19 +971,22 @@ class CueMidi:
         if pools is not None:
             log.info("Sequence pools: %s", pools.describe())
 
-    def event(self, name: str) -> None:
+    def event(self, name: str) -> Optional[tuple[int, int]]:
+        """Send a section cue; returns (sequence, pool size) when a pool sequence was picked."""
         note = NOTES.get(name)
         if note is None:
-            return
+            return None
         self.note(1, note)
         choice = self.pools.choose(name) if self.pools is not None else None
-        if choice:
-            channel, pool_note, seq = choice
-            self.note(channel, pool_note)
-            count = self.pools.pools[name].count
-            self.last_pick = f"{name.replace('_', '-')} {seq}/{count}"
-            log.info("%s: sequence %d of %d (channel %d, note %d)",
-                     name.replace("_", "-").capitalize(), seq, count, channel, pool_note)
+        if not choice:
+            return None
+        channel, pool_note, seq = choice
+        self.note(channel, pool_note)
+        count = self.pools.pools[name].count
+        self.last_pick = f"{name.replace('_', '-')} {seq}/{count}"
+        log.info("%s: sequence %d of %d (channel %d, note %d)",
+                 name.replace("_", "-").capitalize(), seq, count, channel, pool_note)
+        return seq, count
 
     def set_pools(self, pools) -> None:
         """Swap in another project's sequence pools; the next cue uses them."""

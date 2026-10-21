@@ -226,7 +226,7 @@ def test_simulated_booth_serves_phrases_and_waveforms():
     """The pretend booth: deck 2 has rekordbox phrases, deck 1 only a waveform."""
     import simrig
     try:
-        rig = simrig.SimRig()
+        rig = simrig.SimRig(query_port=0)
     except OSError as e:
         pytest.skip(f"cannot start the simulated booth here: {e}")
     tracker = ph.PhraseTracker(lambda e: None, lambda cc, v: None)
@@ -249,3 +249,20 @@ def test_simulated_booth_serves_phrases_and_waveforms():
 
 def tracker_analyses(v):
     return {k: tp for k, tp in v.tracker.analysis.items() if tp}
+
+
+def test_simulated_booth_sends_track_titles():
+    import simrig
+    try:
+        rig = simrig.SimRig(query_port=0)
+    except OSError as e:
+        pytest.skip(f"cannot start the simulated booth here: {e}")
+    try:
+        client = ph.DbClient("127.0.0.1", posing_as=2, query_port=rig.db.query.getsockname()[1])
+        info = client.metadata(3, 1, 1001)
+        missing = client.metadata(3, 1, 4242)
+        client.close()
+    finally:
+        rig.stop()
+    assert info == {"title": "Rush Hour", "artist": "Mira Vale", "key": "8A", "tempo": 128.0}
+    assert missing == {}

@@ -34,9 +34,9 @@ EPS = wf.ENTRIES_PER_SECOND
 
 # Section layouts in bars: (bars, kind). Kept short so every cue comes round quickly.
 SET = [
-    {"title": "Rush Hour", "bpm": 128.0, "phrases": True,
+    {"title": "Rush Hour", "artist": "Mira Vale", "key": "8A", "bpm": 128.0, "phrases": True,
      "sections": [(8, "intro"), (8, "up"), (16, "drop"), (8, "down"), (8, "up"), (16, "drop"), (8, "outro")]},
-    {"title": "Low Tide (Extended Mix)", "bpm": 126.0, "phrases": False,
+    {"title": "Low Tide (Extended Mix)", "artist": "Okan & Sela", "key": "9A", "bpm": 126.0, "phrases": False,
      "sections": [(8, "intro"), (16, "drop"), (8, "down"), (8, "up"), (16, "drop"), (8, "outro")]},
 ]
 PSSI_KIND = {"intro": 1, "up": 2, "down": 3, "drop": 5, "outro": 6}
@@ -48,6 +48,8 @@ BAND_LEVELS = {"intro": (120, 60, 40), "up": (20, 60, None), "drop": (200, 120, 
 class SimTrack:
     rekordbox_id: int
     title: str
+    artist: str
+    key: str
     bpm: float
     beats: int
     pssi: Optional[bytes]
@@ -78,7 +80,7 @@ def make_track(spec: dict, rekordbox_id: int, seed: int = 0) -> SimTrack:
         beat += bars * 4
     beats = beat - 1
     pssi = ph.build_pssi(ph.HIGH, starts, beats + 1) if spec["phrases"] else None
-    return SimTrack(rekordbox_id, spec["title"], bpm, beats, pssi,
+    return SimTrack(rekordbox_id, spec["title"], spec.get("artist", ""), spec.get("key", ""), bpm, beats, pssi,
                     wf.build_beat_grid(bpm, beats),
                     wf.build_waveform_tag(np.concatenate(lows), np.concatenate(mids), np.concatenate(highs)))
 
@@ -126,6 +128,7 @@ class SimDbServer:
             try:
                 rd.field()
                 conn.sendall(ph._num(1))
+                pending = None
                 while True:
                     txid, kind, args = rd.message()
                     if kind == 0x0000:
@@ -140,6 +143,11 @@ class SimDbServer:
                         elif track and name == "PWV7":
                             data = track.waveform
                         conn.sendall(self._reply(txid, 0x4F02, 0x2C04, data, prefix=True))
+                    elif kind in (0x2002, 0x2202):
+                        pending = self.tracks.get(args[1])
+                        conn.sendall(ph.encode_message(txid, 0x4000, [kind, 4 if pending else 0xFFFFFFFF]))
+                    elif kind == 0x3000 and pending:
+                        conn.sendall(self._menu(txid, pending))
                     elif kind == 0x2204:
                         track = self.tracks.get(args[1])
                         conn.sendall(self._reply(txid, 0x4602, 0x2204, track.grid if track else b"", prefix=False))
@@ -147,6 +155,25 @@ class SimDbServer:
                         return
             except (OSError, ConnectionError, ValueError):
                 return
+
+    @staticmethod
+    def _menu(txid: int, track: SimTrack) -> bytes:
+        """Menu header, title / artist / key / tempo items, footer: what a CDJ sends for metadata."""
+        def string(text: str) -> bytes:
+            raw = (text + "\x00").encode("utf-16-be")
+            return b"\x26" + struct.pack(">I", len(raw) // 2) + raw
+
+        def item(kind: int, main: int, label: str) -> bytes:
+            types = bytes([6, 6, 6, 2, 6, 2, 6, 6, 6, 6, 6, 6])
+            label_bytes = len((label + "\x00").encode("utf-16-be"))
+            return (ph._num(ph.MSG_MAGIC) + ph._num(txid) + ph._num(0x4101, 2) + ph._num(12, 1) + ph._blob(types)
+                    + ph._num(0) + ph._num(main) + ph._num(label_bytes) + string(label) + ph._num(2) + string("")
+                    + ph._num(kind) + ph._num(0) + ph._num(0) + ph._num(0) + ph._num(0) + ph._num(0))
+
+        header = ph.encode_message(txid, 0x4001, [])
+        footer = ph.encode_message(txid, 0x4201, [])
+        return (header + item(0x04, track.rekordbox_id, track.title) + item(0x07, 1, track.artist)
+                + item(0x0F, 0, track.key) + item(0x0D, int(track.bpm * 100), "") + footer)
 
     @staticmethod
     def _reply(txid: int, kind: int, req: int, data: bytes, prefix: bool) -> bytes:
@@ -172,9 +199,9 @@ class SimRig:
 
     MIXER = 33
 
-    def __init__(self, dropout_after: Optional[float] = None):
+    def __init__(self, dropout_after: Optional[float] = None, query_port: int = ph.DB_QUERY_PORT):
         self.tracks = [make_track(spec, 1001 + i, seed=i) for i, spec in enumerate(SET)]
-        self.db = SimDbServer({t.rekordbox_id: t for t in self.tracks})
+        self.db = SimDbServer({t.rekordbox_id: t for t in self.tracks}, query_port=query_port)
         self.out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.decks = {1: Deck(1), 2: Deck(2)}
         self.alive = True
