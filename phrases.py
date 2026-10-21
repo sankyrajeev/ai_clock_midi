@@ -946,6 +946,12 @@ class CueMidi:
             log.info("%s: sequence %d of %d (channel %d, note %d)",
                      name.replace("_", "-").capitalize(), seq, count, channel, pool_note)
 
+    def set_pools(self, pools) -> None:
+        """Swap in another project's sequence pools; the next cue uses them."""
+        with self._lock:
+            self.pools = pools
+            self.last_pick = ""
+
     def note(self, channel: int, note: int) -> None:
         """Send a short note on a 1-based MIDI channel."""
         self._send("note_on", channel=channel - 1, note=note, velocity=127)

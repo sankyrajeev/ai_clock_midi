@@ -66,6 +66,31 @@ developer" (this happens with the ZIP download), right-click it → **Open** →
 `--link` or `--source 1`, edit the `ARGS=(...)` line in the launcher.
 After a `git pull` the launchers install any new requirements by themselves.
 
+## Projects
+
+Pool settings belong to a **Lumière project**: one JSON file per show,
+`~/Documents/Lumiere Link/<name>.lumiere`, holding the pool counts, mode,
+pairing, the sequences already MIDI-learned, and the paired Lightkey project
+(name and file path). Saves are atomic and happen on every change.
+
+By default the app follows Lightkey (`lightkey.py`): every 3 s it asks System
+Events for Lightkey's document window title and its `AXDocument` (file path),
+then picks the Lumière project paired by path, else by name (case, extension
+and " — Edited" ignored), creating one from the current settings if none
+matches. Reading is the only thing it does with Lightkey. macOS asks once for
+Automation permission; if it's refused, the app says so once and stays on the
+current project. On first run an old `pools.json` next to the app becomes the
+project "Default".
+
+| Option | Effect |
+|---|---|
+| `--project NAME` | use (or create) that project, don't follow Lightkey |
+| `--projects` | list projects |
+| `--projects-dir DIR` | keep projects somewhere else |
+| `--no-follow-lightkey` | stay on "Default" |
+| `--lightkey-check` | print what Lightkey reports, then exit (`Check Lightkey Project.command`) |
+| `--pools FILE` | use a stand-alone settings file instead of a project |
+
 ## Sequence pools
 
 Each section type has a pool of up to 24 lighting sequences, and every time
@@ -81,8 +106,7 @@ sequence 24 = note 59 / B2):
 | Pre-drop | 5 | | Bridge | 9 |
 
 The plain section note on channel 1 (table below) is still sent as well.
-Settings are in `pools.json`, created on first run and never overwritten by
-updates:
+Settings are stored in the active project (above); the format is:
 
 ```json
 {
@@ -99,7 +123,7 @@ updates:
   it, when the drop pool is that big.
 - `--learn` (or `Learn Sequences (MIDI Learn helper).command`) steps through
   every sequence note for MIDI-learning; `--learn drop` does one pool.
-- `--pools FILE` uses another settings file; `--no-pools` turns pools off.
+- `--no-pools` turns pools off.
 
 ## Phrase cues over the network (recommended)
 

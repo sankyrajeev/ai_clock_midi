@@ -24,7 +24,8 @@ Choosing:
 With pairing on, a drop uses the same number as the build that led into it
 (build 7 -> drop 7), so builds and drops designed as pairs stay together.
 
-Settings live in pools.json next to the app; see load_config().
+Settings belong to a Lumière project (projects.py); a stand-alone pools.json can
+still be loaded with load_config().
 """
 
 from __future__ import annotations
@@ -161,10 +162,11 @@ def load_config(path: Path) -> dict:
         return DEFAULT_CONFIG
 
 
-def learn(send, pools: SequencePools, only: Optional[str] = None, ask=input, say=print) -> None:
+def learn(send, pools: SequencePools, only: Optional[str] = None, ask=input, say=print, mark=None) -> None:
     """Step through every sequence so each can be MIDI-learned in Lightkey.
 
-    `send(channel, note)` sends one note; `ask` waits for the user between notes."""
+    `send(channel, note)` sends one note; `ask` waits for the user between notes;
+    `mark(pool, sequence)`, if given, records each sequence as learned."""
     names = [only] if only else list(pools.pools)
     for name in names:
         pool = pools.pools.get(name)
@@ -181,5 +183,7 @@ def learn(send, pools: SequencePools, only: Optional[str] = None, ask=input, say
             if reply == "s":
                 break
             send(pool.channel, note)
+            if mark:
+                mark(name, seq)
             say(f"    sent {LABELS[name]} {seq}: channel {pool.channel}, note {note} ({note_name(note)})")
     say("\nDone. Every learned sequence will now be picked automatically during the show.")

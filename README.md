@@ -120,7 +120,7 @@ Whenever there's a new version, open Terminal and run:
 cd ~/LumiereLink && git pull
 ```
 
-Your own settings (`pools.json`) are never overwritten by an update.
+Your own settings (your Lumière projects in **Documents › Lumiere Link**) are never touched by an update.
 
 ---
 
@@ -204,71 +204,95 @@ to 24.
 > when a new cue is triggered. Each pool should replace whatever was running,
 > not stack on top of it.
 
-### 6.3 Tell Lumière Link how many you made
+### 6.3 One Lumière project per Lightkey project
 
-The first time Lumière Link runs, it creates a settings file called
-**`pools.json`** in the LumiereLink folder. Open it with **TextEdit**
-(right-click › Open With › TextEdit). It looks like this:
+Lumière Link keeps your settings in **projects**, one for each show, just like
+Lightkey. A project remembers:
+
+- how many sequences each pool has,
+- Shuffle / Random / In order, and build → drop pairing,
+- which sequences you've already connected to Lightkey (MIDI-learned).
+
+**It follows Lightkey by itself.** Every few seconds Lumière Link checks which
+project Lightkey has open and uses the Lumière project with the **same name**:
+
+- Open **"Club Night"** in Lightkey → Lumière Link uses its **"Club Night"** project.
+- Lightkey project with no Lumière project yet → Lumière Link **creates one with
+  the same name**, starting from the settings you were just using.
+- Switch Lightkey to another project mid-show → the next cue uses the new
+  project's sequences.
+
+The Terminal window confirms it, e.g.
+`Lightkey opened 'Club Night': using Lumière project 'Club Night' (Drop 24, Build 24 …)`.
+
+**First time only:** macOS asks whether Terminal may control **System Events**.
+Click **OK**. That's how Lumière Link reads the name of the open Lightkey
+project. It only reads the name; it never changes your Lightkey files. To check
+it works, open a project in Lightkey and double-click
+**`Check Lightkey Project.command`**. It should say `All good`.
+
+> If you clicked "Don't Allow": System Settings › Privacy & Security ›
+> **Automation** › Terminal › switch on **System Events**. Until then Lumière
+> Link keeps using the project called **Default**.
+
+Projects are saved in **Documents › Lumiere Link**, one file per show
+(e.g. `Club Night.lumiere`). Copy that folder to take your shows to another Mac.
+
+### 6.4 Tell each project how many sequences you made
+
+Until the full app (with + / – buttons) arrives, you set the numbers in the
+project file:
+
+1. In Finder, open **Documents › Lumiere Link**.
+2. Right-click your show's file (e.g. `Club Night.lumiere`) › **Open With** › **TextEdit**.
+3. Find the `"pools"` part and change each number to **how many sequences you
+   actually made** in that Lightkey project:
 
 ```json
-{
-  "mode": "shuffle",
-  "pair_builds_with_drops": true,
   "pools": {
     "drop": 24,
     "build": 24,
-    "breakdown": 24,
-    "pre_drop": 24,
-    "intro": 24,
-    "outro": 24,
-    "verse": 24,
-    "bridge": 24
+    "breakdown": 6,
+    "pre_drop": 8,
+    "intro": 0,
+    "outro": 4,
+    "verse": 0,
+    "bridge": 0
   }
-}
 ```
 
-Change each number to **how many sequences you actually made** for that pool:
+- `0` switches a pool off. The maximum is 24.
+- Further up: `"mode"` is `"shuffle"` (recommended), `"random"` or `"order"`,
+  and `"pair_builds_with_drops"` is `true` or `false`.
+- Save (⌘ S) and restart Lumière Link.
 
-- Made 24 drops and 24 builds but only 6 breakdowns → `"breakdown": 6`
-- Don't want intro sequences at all → `"intro": 0` (0 switches a pool off)
-- The maximum is 24.
+**This matters:** if the file says 24 but you only made 10, then sometimes the
+app picks a sequence that doesn't exist, and nothing happens on that drop.
 
-**This matters:** if the file says 24 but you only made 10, then 14 times out
-of 24 the app picks a sequence that doesn't exist, and nothing happens on
-that drop.
-
-Save the file (⌘ S). The next time you start Lumière Link it uses the new
-numbers, and the Terminal window confirms them at the top, e.g.
-`Sequence pools: Drop 24 (ch 2), Build 24 (ch 3), Breakdown 6 (ch 4) …`
-
-Other settings in the same file:
-- `"mode"`: `"shuffle"` (recommended), `"random"` (may repeat), or `"order"` (1, 2, 3 … in turn).
-- `"pair_builds_with_drops"`: `true` or `false`.
-
-### 6.4 Connect each sequence to its MIDI note (MIDI Learn)
+### 6.5 Connect each sequence to Lightkey (MIDI Learn)
 
 Lightkey needs to know which MIDI message starts which sequence. The **MIDI
-Learn helper** sends each one for you, one at a time:
+Learn helper** sends them for you, one at a time, into the Lumière project that
+matches the Lightkey project you have open:
 
-1. Open Lightkey.
-2. Double-click **`Learn Sequences (MIDI Learn helper).command`**.
-3. The window says, for example:
-   `In Lightkey, start MIDI Learn on Drop sequence 1, then press Enter`
-4. In Lightkey, put **Drop 1** into **MIDI Learn** mode, so it waits for a MIDI
-   message.
-5. Click back on the Terminal window and press **Enter**. Lumière Link sends
-   Drop 1's note, and Lightkey learns it.
-6. It moves on to **Drop sequence 2**. Repeat steps 4–5.
-7. When the Drop pool is done it continues with Build, then the others.
+1. Open your project in Lightkey.
+2. Double-click **`Learn Sequences (MIDI Learn helper).command`**. It names the
+   project it's learning into, e.g. `MIDI Learn helper for Lumière project 'Club Night'`.
+3. It says, for example: `In Lightkey, start MIDI Learn on Drop sequence 1, then press Enter`.
+4. In Lightkey, open the **External Control** setting of your first drop cue
+   and start learning, so it waits for a MIDI message.
+5. Click back on the Terminal window and press **Enter**. Lightkey learns it.
+6. Repeat for Drop sequence 2, 3 … then Build and the other pools.
 
-Shortcuts while it runs: type **`s`** then Enter to **skip** the rest of a pool,
-or **`q`** then Enter to **quit**.
+Shortcuts: **`s`** then Enter skips the rest of a pool, **`q`** then Enter quits.
 
-You only do this once. Lightkey remembers the mappings.
+**You do this once per Lightkey project, not once per show night.** Lightkey
+saves the mappings in its project (save it with ⌘ S as usual) and Lumière Link
+saves its side by itself. Restarting the Mac changes nothing.
 
-> Each pool has its own MIDI channel, and the sequence number decides the note
-> (sequence 1 = C1 … sequence 24 = B2). The full table is in part 13. You never
-> need to type these in yourself; the helper does it.
+> **Tip:** for a new show, **duplicate an already-mapped Lightkey project**
+> instead of starting from scratch. Lumière Link always uses the same notes
+> (Drop sequence 1 is always channel 2, note C1), so the copy works straight away.
 
 ---
 
@@ -304,7 +328,7 @@ like `Deck 2: 7 sections from rekordbox …` appears.
 4. ☐ Double-click **`Start Lumiere Link.command`**.
 5. ☐ Terminal shows **Found …** for every player, and **Joined the network**.
 6. ☐ Lightkey's BPM matches the CDJ.
-7. ☐ Play a track: the status line shows the section, e.g. `[deck 2: Up (rekordbox) · build 5/24]`.
+7. ☐ Play a track: the status line shows your project and the section, e.g. `[Club Night · deck 2: Up (rekordbox) · build 5/24]`.
 8. ☐ Leave the Terminal window open all night. **Closing it stops the lights following.**
 
 ---
@@ -314,11 +338,12 @@ like `Deck 2: 7 sections from rekordbox …` appears.
 The last line updates on every beat:
 
 ```
-[deck 2: Chorus (rekordbox) · drop 5/24]  DJM-V10  dev 33 beat 1  128.00 BPM  (track 128.00, pitch +0.00%)
+[Club Night · deck 2: Chorus (rekordbox) · drop 5/24]  DJM-V10  dev 33 beat 1  128.00 BPM  (track 128.00, pitch +0.00%)
 ```
 
 | Part | Meaning |
 |---|---|
+| `Club Night` | the Lumière project in use (matches your Lightkey project) |
 | `deck 2` | which CDJ the lights are following (the tempo master) |
 | `Chorus` | the section playing now (rekordbox calls a drop "Chorus", a build "Up", a breakdown "Down") |
 | `(rekordbox)` / `(waveform)` | where the section information came from (see part 12) |
@@ -364,12 +389,13 @@ The app tells you what to check. The usual messages:
 | **macOS is blocking this app from the local network** | System Settings › Privacy & Security › **Local Network** › switch on **Terminal**. |
 | **… is running on this Mac and is probably taking the status packets** | Quit that app (Bridge / ShowKontrol / rekordbox), then restart Lumière Link. |
 | **CDJ … is at 192.168.x.x, but this Mac's Ethernet is on …** | A player is stuck on an old address. Accept the password prompt to fix it, or restart that CDJ. |
+| **macOS hasn't allowed reading which Lightkey project is open** | System Settings › Privacy & Security › Automation › Terminal › switch on System Events (part 6.3). |
 | **no phrase or waveform data for this track** | Typical for streaming. Use the live audio backup (`--cues`) or play from a rekordbox USB. |
 
 Other problems:
 
 - **Lightkey's BPM doesn't move:** check the tempo source is MIDI Clock with input **Lumiere Clock**, and that the Lumière Link window is open.
-- **A drop happens but nothing changes:** the picked sequence probably isn't mapped. Check the count in `pools.json` matches how many sequences you made, and re-run the MIDI Learn helper for that pool.
+- **A drop happens but nothing changes:** the picked sequence probably isn't mapped. Check the counts in your project file (part 6.4) match how many sequences you made, and re-run the MIDI Learn helper for that pool.
 - **Looks stack up instead of replacing each other:** see the note in 6.2.
 - **Unplugged a cable mid-set?** Just plug it back in. Lumière Link reconnects by itself within a few seconds.
 

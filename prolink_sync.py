@@ -399,23 +399,50 @@ def simulate(bpm: float, device: int, stop: threading.Event) -> None:
         time.sleep(max(0.0, nxt - time.monotonic()))
 
 
-def _learn(args, seq_pools) -> int:
+def _open_project(args):
+    """Pick the starting Lumière project. Returns (ProjectManager or None, follow Lightkey?)."""
+    if args.no_pools:
+        return None, False
+    from pools import load_config
+    from projects import NAME_TIP, Project, ProjectManager, ProjectStore
+
+    store = ProjectStore(Path(args.projects_dir))
+    legacy = Path(__file__).with_name("pools.json")
+    if args.pools:  # a one-off settings file, not a saved project
+        manager = ProjectManager(store, Project(Path(args.pools).stem, load_config(Path(args.pools))))
+        manager.persist = False
+        return manager, False
+    if args.project:
+        project = store.load(args.project)
+        if project is None:
+            project = store.create(args.project, base=store.ensure_default(legacy))
+            log.info("Created Lumière project '%s' in %s. %s", project.name, store.dir, NAME_TIP)
+        return ProjectManager(store, project), False
+    return ProjectManager(store, store.ensure_default(legacy)), not args.no_follow_lightkey
+
+
+def _learn(args, manager, follow: bool) -> int:
     """Interactive MIDI Learn helper: sends each pool sequence's note on request."""
     import pools as pl
     from phrases import CueMidi
 
-    if seq_pools is None or not seq_pools.pools:
-        log.error("No sequence pools are switched on; check %s", args.pools)
+    if manager and follow:
+        from lightkey import read_open_project
+        manager.on_lightkey(read_open_project())  # learn into the project Lightkey has open
+    if manager is None or not manager.pools.pools:
+        log.error("No sequence pools are switched on in this project")
         return 1
     try:
         out = CueMidi(args.cue_port, args.existing_port)
     except Exception as e:  # noqa: BLE001 - surface any backend error plainly
         log.error("Could not open MIDI port %r: %s", args.cue_port, e)
         return 1
-    print(f"\nMIDI Learn helper. In Lightkey, make sure the input {args.cue_port!r} is enabled.")
+    print(f"\nMIDI Learn helper for Lumière project '{manager.project.name}' ({manager.project.summary()}).")
+    print(f"In Lightkey, make sure the input {args.cue_port!r} is enabled.")
     print("For each sequence: put it into MIDI Learn in Lightkey, then press Enter here.")
     try:
-        pl.learn(out.note, seq_pools, None if args.learn == "all" else args.learn)
+        pl.learn(out.note, manager.pools, None if args.learn == "all" else args.learn,
+                 mark=manager.mark_learned)
     except (KeyboardInterrupt, EOFError):
         print()
     finally:
@@ -460,8 +487,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--simulate", type=float, metavar="BPM",
                     help="generate fake beat packets at BPM locally (testing without gear)")
     pool = ap.add_argument_group("sequence pools (each drop, build, ... picks one of up to 24 sequences)")
-    pool.add_argument("--pools", default=str(Path(__file__).with_name("pools.json")),
-                      help="pool settings file (default: pools.json next to this app; created if missing)")
+    pool.add_argument("--project", metavar="NAME",
+                      help="use this Lumière project (created if new) instead of following Lightkey")
+    pool.add_argument("--projects", action="store_true", help="list your Lumière projects and exit")
+    pool.add_argument("--projects-dir", default=str(Path.home() / "Documents" / "Lumiere Link"),
+                      help="where projects are kept (default: %(default)s)")
+    pool.add_argument("--no-follow-lightkey", action="store_true",
+                      help="don't switch projects to match the project open in Lightkey")
+    pool.add_argument("--lightkey-check", action="store_true",
+                      help="show which project Lightkey has open (checks the macOS permission), then exit")
+    pool.add_argument("--pools", metavar="FILE", help="use a stand-alone pool settings file instead of a project")
     pool.add_argument("--no-pools", action="store_true", help="send only the single cue note per section")
     pool.add_argument("--learn", nargs="?", const="all", metavar="POOL",
                       help="step through every sequence so Lightkey can MIDI-learn it, then exit "
@@ -506,12 +541,17 @@ def main(argv: Optional[list[str]] = None) -> int:
             fmt = handler.formatter
             handler.setFormatter(logging.Formatter("\r\033[K" + fmt._fmt, fmt.datefmt))
 
-    seq_pools = None
-    if not args.no_pools:
-        from pools import SequencePools, load_config
-        seq_pools = SequencePools(load_config(Path(args.pools)))
+    if args.lightkey_check:
+        from lightkey import probe
+        return probe()
+    manager, follow = _open_project(args)
+    if args.projects:
+        names = manager.store.names() if manager else []
+        print("\n".join(names) if names else "No projects yet.")
+        return 0
+    seq_pools = manager.pools if manager else None
     if args.learn:
-        return _learn(args, seq_pools)
+        return _learn(args, manager, follow)
 
     if args.list_audio:
         from sections import list_audio_devices
@@ -628,7 +668,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             line = "[network problem: see message above]  " + line
         elif tracker:
             pick = getattr(cue_out, "last_pick", "")
-            line = f"[{tracker.current()}{' · ' + pick if pick else ''}]  " + line
+            proj = f"{manager.project.name} · " if manager else ""
+            line = f"[{proj}{tracker.current()}{' · ' + pick if pick else ''}]  " + line
         elif audio:
             line += f"  [{(audio.detector.state or 'listening').upper()}]"
         if sys.stdout.isatty():
@@ -645,6 +686,17 @@ def main(argv: Optional[list[str]] = None) -> int:
                     on_beat=(lambda b: audio.detector.on_beat(b.beat_in_bar, b.received)) if audio else None)
     clock_thread = threading.Thread(target=engine.run_clock, daemon=True)
     clock_thread.start()
+
+    watcher = None
+    if manager:
+        if cue_out is not None and hasattr(cue_out, "set_pools"):
+            manager.on_switch = lambda project, pools: cue_out.set_pools(pools)
+        if follow:
+            from lightkey import LightkeyWatcher
+            watcher = LightkeyWatcher(manager.on_lightkey)
+            watcher.start()
+        else:
+            log.info("Lumière project: '%s' (%s)", manager.project.name, manager.project.summary())
 
     log.info("Waiting for beats on UDP %d (source: %s). Press play on a deck.", BEAT_PORT, args.source)
     try:
@@ -666,6 +718,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             vcdj.close()
         if rig:
             rig.stop()
+        if watcher:
+            watcher.stop()
         if cue_out:
             cue_out.close()
         sock.close()
