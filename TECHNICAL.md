@@ -40,6 +40,27 @@ branch.
 - **MIDI Start** goes out on a downbeat (beat 1 of the bar), so Lightkey's bar
   position matches the decks.
 
+## The app
+
+`lumiere_app.py` is the Mac app. It starts `engine.LumiereEngine` (network,
+phrase tracker, MIDI clock, cue pools, projects, Lightkey watcher, optional
+live audio, all in background threads) and `appserver.AppServer`, a small HTTP
+server bound to 127.0.0.1 on a free port. A pywebview window (1400×830, not
+resizable) loads `ui/index.html` from it.
+
+- `GET /api/state`: snapshot polled every 125 ms; `GET /api/waveform?key=p-s-id`;
+  `POST /api/action {"name", "args"}` → `LumiereEngine.do_<name>`.
+- Every API call needs the `X-Token` header (a random token per launch, passed
+  to the window in its URL); anything else gets 403.
+- Settings: `~/Library/Application Support/Lumiere Link/settings.json`; log:
+  `lumiere.log` in the same folder. Projects: `~/Documents/Lumiere Link/*.lumiere`.
+- `python3 lumiere_app.py --browser --demo` runs it in a browser for development.
+
+Build: `packaging/build_mac.sh` (PyInstaller, `packaging/LumiereLink.spec`,
+ad-hoc codesign, `.dmg`). GitHub Actions (`.github/workflows/build-mac.yml`)
+runs the tests, builds arm64 and x86_64 DMGs and publishes them to the
+`app-latest` release.
+
 ## Quick start (double-click)
 
 1. Download the repo: `git clone https://github.com/sankyrajeev/ai_clock_midi`,

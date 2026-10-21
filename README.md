@@ -10,10 +10,9 @@ time, it picks one of your own lighting sequences.
 This guide assumes you've never done this before. Follow it top to bottom the
 first time. After that, the **Gig-day checklist** (part 8) is all you need.
 
-> **Where things stand:** the engine is finished and has been tested on a real
-> CDJ‑3000X. For now you start it by double-clicking a file and it runs in a
-> Terminal window that shows text. The app with the full screen (deck rack,
-> waveform, cue pads) is coming next and will work the same way.
+> **It's one app.** You download it, drag it into Applications and open it.
+> Everything (decks, waveform, sequences, projects, settings) is on one screen.
+> No Terminal and no text files.
 
 ---
 
@@ -27,7 +26,7 @@ first time. After that, the **Gig-day checklist** (part 8) is all you need.
 6. [Set up your sequence pools](#6-set-up-your-sequence-pools)
 7. [Connect the real gear](#7-connect-the-real-gear)
 8. [Gig-day checklist](#8-gig-day-checklist)
-9. [Reading the Terminal window](#9-reading-the-terminal-window)
+9. [Reading the screen](#9-reading-the-screen)
 10. [Fine-tuning](#10-fine-tuning)
 11. [When something's wrong](#11-when-somethings-wrong)
 12. [Questions people ask](#12-questions-people-ask)
@@ -83,72 +82,58 @@ on the Mac.
 
 ### 3.1 Download
 
-On the Mac, open **Terminal**: press ⌘ Space, type `Terminal`, press Enter.
-Copy this line in, press Enter, and wait for it to finish:
+1. Go to **https://github.com/sankyrajeev/ai_clock_midi/releases/tag/app-latest**.
+2. Under **Assets**, download the file for your Mac:
+   - **`…-arm64.dmg`** for Apple silicon (M1, M2, M3, M4 …)
+   - **`…-x86_64.dmg`** for older Intel Macs
 
-```bash
-git clone https://github.com/sankyrajeev/ai_clock_midi ~/LumiereLink
-```
-
-> If macOS asks to install "command line developer tools", click **Install**,
-> wait for it to finish, then run the line again.
-
-That creates a folder called **LumiereLink** in your home folder. In Finder,
-choose **Go › Home** and open **LumiereLink**.
-
-> **Already installed it earlier** as `ai_clock_midi`? You don't need to download
-> again. Use that folder instead, and update it with
-> `cd ~/ai_clock_midi && git pull`. Wherever this guide says LumiereLink, read
-> ai_clock_midi.
+   Not sure? Apple menu › **About This Mac**: "Chip: Apple M…" means arm64.
+3. Open the downloaded `.dmg` and drag **Lumière Link** onto **Applications**.
 
 ### 3.2 First launch
 
-1. In the LumiereLink folder, double-click **`Simulate Booth (no gear).command`**.
-2. If macOS says it "can't be opened because it is from an unidentified
-   developer": **right-click** the file › **Open** › **Open**. You only need to
-   do this once per file.
-3. A Terminal window opens and says **"Setting up (this takes a minute)…"**.
-   This happens once. It downloads the parts the app needs.
-4. If macOS asks whether the app may **find devices on your local network**,
-   click **Allow**. Without it the app can't see the CDJs.
+The app isn't sold through the App Store, so macOS asks you to confirm it once:
+
+1. Open **Applications**, **right-click** Lumière Link › **Open** › **Open**.
+2. On newer macOS (Sequoia and later) that button may be missing. Then go to
+   System Settings › **Privacy & Security**, scroll down to
+   *"Lumière Link was blocked…"* and click **Open Anyway**.
+
+macOS then asks a few questions. Answer them like this:
+
+| Question | Click | Why |
+|---|---|---|
+| Find devices on your **local network**? | **Allow** | Without it the app can't see the CDJs. |
+| Lumière Link wants to control **System Events**? | **OK** | So it can read which Lightkey project is open (part 6.3). |
+| Access the **microphone**? | **OK** (only appears if you turn on Live audio backup) | For the optional FOH aux input. |
+
+The first time, the **How it works** guide opens. It shows the connections.
+You can open it again any time with the **How it works** button at the top.
 
 ### 3.3 Getting updates
 
-Whenever there's a new version, open Terminal and run:
-
-```bash
-cd ~/LumiereLink && git pull
-```
-
-Your own settings (your Lumière projects in **Documents › Lumiere Link**) are never touched by an update.
+Download the newest `.dmg` from the same link and drag it into Applications
+again (choose **Replace**). Your Lumière projects in **Documents › Lumiere Link**
+and your settings are kept.
 
 ---
 
 ## 4. Try it without any gear
 
-**`Simulate Booth (no gear).command`** pretends to be a booth with two
-CDJ‑3000Xs and a DJM‑V10, right there on your Mac. Use it to learn the app and
-to set up Lightkey at home.
+Switch on **Demo mode** (right-hand column), or click **Try demo mode** on the
+start screen. It pretends to be a booth with two CDJ‑3000Xs and a DJM‑V10.
+Use it to learn the app and to set up Lightkey at home.
 
-Double-click it and watch the Terminal window. Within a few seconds you'll see:
+Within a few seconds you'll see:
 
-```
-Found CDJ-3000X (device 1) at 127.0.0.1
-Found CDJ-3000X (device 2) at 127.0.0.1
-Found DJM-V10 (device 33) at 127.0.0.1
-Deck 2: 7 sections from rekordbox (Intro / Up / Chorus / Down / Up / Chorus / Outro)
-Deck 1: 6 sections from waveform (Intro / Drop / Breakdown / Build / Drop / Outro)
-Joined the network as device 7 ...
-Intro: sequence 16 of 24 (channel 6, note 51)
-Build: sequence 5 of 24 (channel 3, note 40)
-Pre-drop: sequence 17 of 24 (channel 5, note 52)
-Drop: sequence 5 of 24 (channel 2, note 40)
-```
+- two decks in the **Decks** rack on the left, with titles, BPM and a green dot
+  for the one the lights follow,
+- the **phrase map** (Intro / Build / Drop …) and the **waveform** of that track,
+- **Now / Next** with a countdown ring to the next section,
+- the cue pads lighting up and the **Cue log** filling with lines like
+  `Drop · sequence 5 of 24`.
 
-That means it found the (pretend) decks, worked out each track's sections,
-and is choosing sequences as the music plays. To stop, close the window.
-
----
+Switch Demo mode off before the gig.
 
 ## 5. Set up Lightkey: tempo
 
@@ -211,10 +196,14 @@ Lightkey. A project remembers:
 
 - how many sequences each pool has,
 - Shuffle / Random / In order, and build → drop pairing,
-- which sequences you've already connected to Lightkey (MIDI-learned).
+- which sequences you've already connected to Lightkey (the ✓ marks).
 
-**It follows Lightkey by itself.** Every few seconds Lumière Link checks which
-project Lightkey has open and uses the Lumière project with the **same name**:
+The project name is at the top of the screen, next to the logo. Click it to
+switch, or to make a **New project…**
+
+**It follows Lightkey by itself** (the **Follow Lightkey project** switch in
+that menu). Every few seconds Lumière Link checks which project Lightkey has
+open and uses the Lumière project with the **same name**:
 
 - Open **"Club Night"** in Lightkey → Lumière Link uses its **"Club Night"** project.
 - Lightkey project with no Lumière project yet → Lumière Link **creates one with
@@ -222,77 +211,54 @@ project Lightkey has open and uses the Lumière project with the **same name**:
 - Switch Lightkey to another project mid-show → the next cue uses the new
   project's sequences.
 
-The Terminal window confirms it, e.g.
-`Lightkey opened 'Club Night': using Lumière project 'Club Night' (Drop 24, Build 24 …)`.
+A small **LIGHTKEY** tag next to the project name means it's following.
 
-**First time only:** macOS asks whether Terminal may control **System Events**.
-Click **OK**. That's how Lumière Link reads the name of the open Lightkey
-project. It only reads the name; it never changes your Lightkey files. To check
-it works, open a project in Lightkey and double-click
-**`Check Lightkey Project.command`**. It should say `All good`.
+It only reads the project's name; it never changes your Lightkey files.
+If you clicked "Don't Allow" for System Events: System Settings › Privacy &
+Security › **Automation** › Lumière Link › switch on **System Events**.
 
-> If you clicked "Don't Allow": System Settings › Privacy & Security ›
-> **Automation** › Terminal › switch on **System Events**. Until then Lumière
-> Link keeps using the project called **Default**.
+Making a project by hand? **Use the same name as your Lightkey project**, so
+they pair up by themselves later.
 
 Projects are saved in **Documents › Lumiere Link**, one file per show
 (e.g. `Club Night.lumiere`). Copy that folder to take your shows to another Mac.
 
 ### 6.4 Tell each project how many sequences you made
 
-Until the full app (with + / – buttons) arrives, you set the numbers in the
-project file:
+Click **Sequences** (above the cue pads). On the left is each pool with
+**– / +** buttons. Set each to **how many sequences you actually made** in that
+Lightkey project. 0 switches a pool off; the maximum is 24. Below the tiles you
+choose **Shuffle / Random / In order** and **Pair builds with drops**.
 
-1. In Finder, open **Documents › Lumiere Link**.
-2. Right-click your show's file (e.g. `Club Night.lumiere`) › **Open With** › **TextEdit**.
-3. Find the `"pools"` part and change each number to **how many sequences you
-   actually made** in that Lightkey project:
+Everything saves by itself into the current project ("Saved automatically").
 
-```json
-  "pools": {
-    "drop": 24,
-    "build": 24,
-    "breakdown": 6,
-    "pre_drop": 8,
-    "intro": 0,
-    "outro": 4,
-    "verse": 0,
-    "bridge": 0
-  }
-```
-
-- `0` switches a pool off. The maximum is 24.
-- Further up: `"mode"` is `"shuffle"` (recommended), `"random"` or `"order"`,
-  and `"pair_builds_with_drops"` is `true` or `false`.
-- Save (⌘ S) and restart Lumière Link.
-
-**This matters:** if the file says 24 but you only made 10, then sometimes the
-app picks a sequence that doesn't exist, and nothing happens on that drop.
+**This matters:** if it says 24 but you only made 10, then sometimes the app
+picks a sequence that doesn't exist, and nothing happens on that drop.
 
 ### 6.5 Connect each sequence to Lightkey (MIDI Learn)
 
-Lightkey needs to know which MIDI message starts which sequence. The **MIDI
-Learn helper** sends them for you, one at a time, into the Lumière project that
-matches the Lightkey project you have open:
+Lightkey needs to know which MIDI message starts which sequence. In the same
+**Sequences** screen:
 
-1. Open your project in Lightkey.
-2. Double-click **`Learn Sequences (MIDI Learn helper).command`**. It names the
-   project it's learning into, e.g. `MIDI Learn helper for Lumière project 'Club Night'`.
-3. It says, for example: `In Lightkey, start MIDI Learn on Drop sequence 1, then press Enter`.
-4. In Lightkey, open the **External Control** setting of your first drop cue
-   and start learning, so it waits for a MIDI message.
-5. Click back on the Terminal window and press **Enter**. Lightkey learns it.
-6. Repeat for Drop sequence 2, 3 … then Build and the other pools.
+1. Open your project in Lightkey (Lumière Link switches to the matching project).
+2. In Lumière Link, pick a pool (e.g. **Drop**) and switch on **Learn**.
+3. In Lightkey, open the **External Control** setting of Drop 1 and start MIDI Learn.
+4. In Lumière Link, click tile **1**. Lightkey learns it, and the tile gets a ✓.
+5. Repeat for the other tiles, then the other pools.
 
-Shortcuts: **`s`** then Enter skips the rest of a pool, **`q`** then Enter quits.
+So yes: in Lightkey you pick the cue, choose External Control / MIDI Learn, then
+click the tile in Lumière Link.
 
 **You do this once per Lightkey project, not once per show night.** Lightkey
-saves the mappings in its project (save it with ⌘ S as usual) and Lumière Link
-saves its side by itself. Restarting the Mac changes nothing.
+saves the mappings in its project (save with ⌘ S as usual) and Lumière Link
+saves the ✓ marks by itself. Restarting the Mac changes nothing.
 
 > **Tip:** for a new show, **duplicate an already-mapped Lightkey project**
 > instead of starting from scratch. Lumière Link always uses the same notes
 > (Drop sequence 1 is always channel 2, note C1), so the copy works straight away.
+
+With Learn switched off, clicking a tile just plays that sequence, which is a
+quick way to check it.
 
 ---
 
@@ -305,11 +271,12 @@ saves its side by itself. Restarting the Mac changes nothing.
 3. Plug the **DJM** into the switch the same way.
 4. Plug the **Mac** into the switch with your Ethernet adapter.
 5. Power everything on, in any order.
-6. Double-click **`Start Lumiere Link.command`**.
+6. Open **Lumière Link** (with Demo mode off).
 
-Within a few seconds you should see a `Found CDJ-3000X …` line for each player,
-then `Joined the network as device 7`. Load a track and press play, and a line
-like `Deck 2: 7 sections from rekordbox …` appears.
+Within a few seconds each player appears in the **Decks** rack and the dots at
+the top light up for each device found. Load a track and it shows the title,
+the phrase map and the waveform. The small tag says **rekordbox** or
+**waveform**, depending on where the sections came from.
 
 > **A CDJ stuck on an old IP address?** Sometimes a player keeps an address from
 > a previous venue. Lumière Link spots this, says so, and offers to fix it from
@@ -324,56 +291,42 @@ like `Deck 2: 7 sections from rekordbox …` appears.
 
 1. ☐ Bridge, ShowKontrol and rekordbox are **closed** on the Mac.
 2. ☐ CDJs + DJM + Mac all plugged into the **same switch** (LINK ports).
-3. ☐ Open **Lightkey**.
-4. ☐ Double-click **`Start Lumiere Link.command`**.
-5. ☐ Terminal shows **Found …** for every player, and **Joined the network**.
+3. ☐ Open **Lightkey**, then open **Lumière Link**. Demo mode is **off**.
+4. ☐ Every player shows up in the **Decks** rack.
+5. ☐ The project name at the top matches your Lightkey project.
 6. ☐ Lightkey's BPM matches the CDJ.
-7. ☐ Play a track: the status line shows your project and the section, e.g. `[Club Night · deck 2: Up (rekordbox) · build 5/24]`.
-8. ☐ Leave the Terminal window open all night. **Closing it stops the lights following.**
+7. ☐ The button at the top says **Live** (not Paused).
+8. ☐ Leave Lumière Link open all night. **Quitting it stops the lights following.**
 
 ---
 
-## 9. Reading the Terminal window
+## 9. Reading the screen
 
-The last line updates on every beat:
-
-```
-[Club Night · deck 2: Chorus (rekordbox) · drop 5/24]  DJM-V10  dev 33 beat 1  128.00 BPM  (track 128.00, pitch +0.00%)
-```
-
-| Part | Meaning |
+| Where | What it tells you |
 |---|---|
-| `Club Night` | the Lumière project in use (matches your Lightkey project) |
-| `deck 2` | which CDJ the lights are following (the tempo master) |
-| `Chorus` | the section playing now (rekordbox calls a drop "Chorus", a build "Up", a breakdown "Down") |
-| `(rekordbox)` / `(waveform)` | where the section information came from (see part 12) |
-| `drop 5/24` | the last sequence picked from your pools |
-| `beat 1` | position in the bar, counting 1 2 3 4 |
-| `128.00 BPM` | the tempo being sent to Lightkey |
-
-Lines above it are events: decks found, tracks analysed, sequences picked,
-and any problem messages (part 11).
+| **Dots at the top** | one per device on the network (CDJs, the mixer). |
+| **Live / Paused** | Paused stops the automatic cues; the clock keeps running and the pads still work by hand. |
+| **Decks** (left) | every player. The highlighted one is the deck the lights follow. Click a deck to follow just that one. |
+| **Tag next to the title** | `rekordbox` or `waveform`: where the sections came from (part 12). |
+| **Phrase map and waveform** | the track's sections and where the DJ is in it. |
+| **Now / Next** | the section playing, the next one, and a ring counting down to it. |
+| **Lighting cues** pads | light up as cues go out, with the sequence number picked. Tap one to fire it by hand. |
+| **Cue log** (right) | everything that was sent, newest at the top. |
+| **Orange banner** | a problem, with what to do (part 11). |
 
 ---
 
 ## 10. Fine-tuning
 
-Options go in the **`ARGS=(...)`** line near the top of
-`Start Lumiere Link.command` (right-click › Open With › TextEdit). Example:
+All in the **Controls** column on the right. Changes are remembered.
 
-```bash
-ARGS=(--phrases --latency-ms 30)
-```
-
-| Want this? | Add |
+| Want this? | Do this |
 |---|---|
-| Lights look a touch **late** | `--latency-ms 30` (try 20–40). Cues and the clock fire that many milliseconds early. |
-| Follow the deck whose **fader is up**, not the tempo master | `--follow on-air` |
-| Always follow **one particular player** | `--follow 2` |
-| Use the **live audio backup** for tracks with no rekordbox data | `--cues` (needs the audio interface from part 1) |
-| Also share tempo over **Ableton Link** | `--link` |
-
-Keep `--phrases` in the list. It's what turns on the cues.
+| Lights look a touch **late** | Drag the **Light delay** knob to 20–40 ms. Cues and the clock fire that much early. |
+| Follow the deck whose **fader is up**, not the tempo master | **Follow › On air** |
+| Always follow **one particular player** | Click that deck in the rack (**Follow › One deck**) |
+| Tracks with no rekordbox data (streaming) | Switch on **Live audio backup** and choose the audio interface (needs the FOH aux from part 1). |
+| Lightkey tempo only, no section cues | Switch off **Phrase cues**. |
 
 ---
 
@@ -386,16 +339,16 @@ The app tells you what to check. The usual messages:
 | **No Ethernet link on …** | The cable between the Mac and the switch is loose or faulty, or the switch has no power. |
 | **No CDJs or mixer are answering** | Check the cables from the players to the switch, and that the players are on. |
 | **No Ethernet port found** | Plug in the Mac's Ethernet adapter. |
-| **macOS is blocking this app from the local network** | System Settings › Privacy & Security › **Local Network** › switch on **Terminal**. |
+| **macOS is blocking this app from the local network** | System Settings › Privacy & Security › **Local Network** › switch on **Lumière Link**. |
 | **… is running on this Mac and is probably taking the status packets** | Quit that app (Bridge / ShowKontrol / rekordbox), then restart Lumière Link. |
 | **CDJ … is at 192.168.x.x, but this Mac's Ethernet is on …** | A player is stuck on an old address. Accept the password prompt to fix it, or restart that CDJ. |
-| **macOS hasn't allowed reading which Lightkey project is open** | System Settings › Privacy & Security › Automation › Terminal › switch on System Events (part 6.3). |
-| **no phrase or waveform data for this track** | Typical for streaming. Use the live audio backup (`--cues`) or play from a rekordbox USB. |
+| **macOS hasn't allowed reading which Lightkey project is open** | System Settings › Privacy & Security › Automation › Lumière Link › switch on System Events (part 6.3). |
+| **no phrase or waveform data for this track** | Typical for streaming. Switch on **Live audio backup**, or play from a rekordbox USB. |
 
 Other problems:
 
-- **Lightkey's BPM doesn't move:** check the tempo source is MIDI Clock with input **Lumiere Clock**, and that the Lumière Link window is open.
-- **A drop happens but nothing changes:** the picked sequence probably isn't mapped. Check the counts in your project file (part 6.4) match how many sequences you made, and re-run the MIDI Learn helper for that pool.
+- **Lightkey's BPM doesn't move:** check the tempo source is MIDI Clock with input **Lumiere Clock**, and that Lumière Link is open.
+- **A drop happens but nothing changes:** the picked sequence probably isn't mapped. Check the counts in **Sequences** (part 6.4) match how many sequences you made, and learn that tile again.
 - **Looks stack up instead of replacing each other:** see the note in 6.2.
 - **Unplugged a cable mid-set?** Just plug it back in. Lumière Link reconnects by itself within a few seconds.
 
@@ -411,11 +364,11 @@ with **phrase analysis** on (it's on by default in rekordbox 6 and 7).
 It still works. When a track has no phrase information, Lumière Link reads the
 track's **waveform** from the CDJ as soon as it loads and works out the
 builds, drops and breakdowns itself. Cues still land exactly on the beat. The
-status line shows `(waveform)` instead of `(rekordbox)`.
+deck shows **waveform** instead of **rekordbox**.
 
 **What about streaming tracks?**
 Those may carry no analysis at all. That's what the optional live audio backup
-(`--cues` with a FOH aux) is for.
+(**Live audio backup** with a FOH aux) is for.
 
 **How many CDJs can I use?**
 Up to 6 players plus the mixer. The lights follow the **tempo master**, so when
@@ -430,7 +383,7 @@ Only in the stuck-IP case in part 7, only after you enter your password, and
 only by adding a temporary extra address.
 
 **Can I test without the decks?**
-Yes: **`Simulate Booth (no gear).command`** (part 4).
+Yes: **Demo mode** (part 4).
 
 ---
 
@@ -469,3 +422,14 @@ Yes: **`Simulate Booth (no gear).command`** (part 4).
 
 For how it all works inside, every command-line option, and the USB-audio
 detector, see [TECHNICAL.md](TECHNICAL.md).
+
+---
+
+## Appendix: running without the app (Terminal)
+
+The older way still works and is kept as a backup. Download the folder with
+`git clone https://github.com/sankyrajeev/ai_clock_midi ~/LumiereLink`, then
+double-click **`Start Lumiere Link.command`** (real gear) or
+**`Simulate Booth (no gear).command`**. Both share the same Lumière projects as
+the app. Use one or the other, not both at once. The USB-audio version lives on
+the `backup-usb-audio` branch.
