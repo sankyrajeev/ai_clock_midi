@@ -11,6 +11,11 @@ from phrases import (BAR, BREAKDOWN, BUILD, DROP, HIGH, INTRO, MID, NEW_TRACK, O
                      parse_status)
 
 MAC = bytes.fromhex("0a0b0c0d0e0f")
+
+
+def loopback_ifaces():
+    import netinfo
+    return [netinfo.Iface("lo0", up=True, addrs=[netinfo.Addr("127.0.0.1", "255.0.0.0", "127.255.255.255")])]
 IP = socket.inet_aton("169.254.10.20")
 
 
@@ -325,6 +330,7 @@ def test_virtual_cdj_end_to_end(monkeypatch):
     except OSError as e:
         pytest.skip(f"cannot bind DJ Link ports here: {e}")
     vcdj.startup_wait, vcdj.claim_interval, vcdj.db_query_port = 0.1, 0.01, srv.query_port
+    vcdj.list_ifaces = loopback_ifaces
     vcdj.start()
     out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:

@@ -228,8 +228,33 @@ Then use beat-synced effects / BPM-based cue timing in Lightkey as usual.
 | `--phrases` | Phrase cues from rekordbox analysis over the network |
 | `--follow master\|on-air\|N` | Which deck drives the phrase cues (default `master`) |
 | `--player-number N` / `--pose-as N` | Device number to claim / player number shown to the CDJ database |
+| `--no-fix-network` | Don't add a matching Mac address when a player is stuck on another subnet |
 | `--demo` | Fake track through the phrase cues, for MIDI-learning |
 | `--cues` | Cues from the mixer audio over USB (fallback when used with `--phrases`) |
+
+## Connecting
+
+Plug the Mac and the players into the same switch, in any order, and start the
+app. It finds the players, joins the network, and keeps watching:
+
+- **Unplugged or rebooted gear**: players that go quiet are dropped. When they
+  come back the app rejoins by itself, keeping the same device number.
+- **A CDJ stuck on an old IP address** (for example one left over from a venue
+  router): the players' beats still arrive, but nothing else can reach the
+  Mac. The app gives the Mac's Ethernet port a second address on the player's
+  network, so you don't have to restart the CDJ. macOS asks for your password
+  the first time. Turn this off with `--no-fix-network`.
+- **This Mac's address changes**: it rejoins on the new address.
+
+The only errors you should see point at something physical:
+
+| Message | What to check |
+|---|---|
+| No Ethernet link on … | the cable from the Mac to the switch, and that the switch has power |
+| No CDJs or mixer are answering | the cables from the players to the switch, and that the players are on |
+| No Ethernet port found | plug in your USB or Thunderbolt Ethernet adapter |
+| macOS is blocking this app from the local network | System Settings > Privacy & Security > Local Network > switch on Terminal (or ProLink Sync) |
+| … is running on this Mac and is probably taking the status packets | quit that app (e.g. PRO DJ LINK Bridge) |
 
 ## Troubleshooting
 

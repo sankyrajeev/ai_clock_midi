@@ -15,10 +15,8 @@ crate-digger and beat-link):
 from __future__ import annotations
 
 import logging
-import re
 import socket
 import struct
-import subprocess
 import threading
 import time
 import uuid
@@ -575,29 +573,6 @@ class PhraseTracker:
 # The virtual player: networking glue
 # --------------------------------------------------------------------------
 
-def _interface_for(peer_ip: str) -> tuple[str, bytes, str]:
-    """(local IP, MAC, broadcast address) of the interface that reaches peer_ip."""
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.connect((peer_ip, ANNOUNCE_PORT))
-        local_ip = s.getsockname()[0]
-    mac = uuid.getnode().to_bytes(6, "big")
-    broadcast = None
-    try:  # macOS / BSD style ifconfig gives us the real MAC and broadcast address
-        out = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=3).stdout
-        for block in re.split(r"\n(?=\S)", out):
-            if re.search(rf"inet {re.escape(local_ip)}\b", block):
-                if m := re.search(r"broadcast (\d+\.\d+\.\d+\.\d+)", block):
-                    broadcast = m.group(1)
-                if m := re.search(r"ether ([0-9a-f:]{17})", block):
-                    mac = bytes.fromhex(m.group(1).replace(":", ""))
-    except (OSError, subprocess.SubprocessError):
-        pass
-    if broadcast is None:
-        parts = local_ip.split(".")
-        broadcast = "169.254.255.255" if local_ip.startswith("169.254.") else ".".join(parts[:3] + ["255"])
-    return local_ip, mac, broadcast
-
-
 class VirtualCdj:
     """Joins the DJ Link network as a player so CDJs send us their status, and
     downloads phrase analysis for each track that gets loaded."""
@@ -607,9 +582,19 @@ class VirtualCdj:
     claim_interval = 0.3    # spacing of the claim packets, as real players do
     db_query_port = DB_QUERY_PORT
     status_timeout = 8.0    # seconds after joining before warning that no status arrives
+    device_timeout = 6.0    # players announce every ~2 s; silence this long means gone
+    search_grace = 10.0     # how long to look before saying nothing was found
 
     def __init__(self, tracker: PhraseTracker, number: int = 0, posing_as: int = 0,
-                 bind: str = "0.0.0.0", broadcast: Optional[str] = None):
+                 bind: str = "0.0.0.0", broadcast: Optional[str] = None, fix_network: bool = True):
+        import netinfo
+
+        self.net = netinfo
+        self.list_ifaces = netinfo.interfaces   # swapped out in tests
+        self.add_alias = netinfo.add_alias
+        self.fix_network = fix_network
+        self.fix_attempted: set[str] = set()
+        self.problem: Optional[str] = None
         self.tracker = tracker
         self.requested_number = number
         self.number = 0
@@ -640,7 +625,7 @@ class VirtualCdj:
         return s
 
     def start(self) -> None:
-        for target in (self._announce_listener, self._status_listener, self._join_and_keepalive, self._fetcher):
+        for target in (self._announce_listener, self._status_listener, self._supervise, self._fetcher):
             threading.Thread(target=target, daemon=True).start()
 
     def close(self) -> None:
@@ -665,36 +650,140 @@ class VirtualCdj:
                 continue
             dev = parse_keepalive(data, time.monotonic())
             if dev and not (dev.ip == self.local_ip and dev.number == self.number):
-                if dev.number not in self.devices:
+                old = self.devices.get(dev.number)
+                if old is None:
                     log.info("Found %s (device %d) at %s", dev.name, dev.number, dev.ip)
+                elif old.ip != dev.ip:
+                    log.info("%s (device %d) moved to %s", dev.name, dev.number, dev.ip)
                 self.devices[dev.number] = dev
 
     _claiming = 0
 
-    def _join_and_keepalive(self) -> None:
-        log.info("Looking for Pro DJ Link devices...")
-        while self.alive and not self.devices:
-            time.sleep(0.5)
-        if not self.alive:
+    def _set_problem(self, text: Optional[str]) -> None:
+        if text == self.problem:
             return
-        peer = next(iter(self.devices.values()))
-        self.local_ip, self.mac, auto_bcast = _interface_for(peer.ip)
-        bcast = self.broadcast or auto_bcast
-        ip = socket.inet_aton(self.local_ip)
-        time.sleep(self.startup_wait)  # let every device announce itself before picking a number
-        self._claim(ip, bcast)
-        log.info("Joined the network as device %d (%s, broadcast %s)", self.number, self.local_ip, bcast)
-        joined, warned = time.monotonic(), False
+        if text:
+            log.warning(text)
+        elif self.problem:
+            log.info("Connection OK again")
+        self.problem = text
+
+    def _expire_devices(self, now: float) -> None:
+        for number, dev in list(self.devices.items()):
+            if now - dev.seen > self.device_timeout:
+                self.devices.pop(number, None)
+                log.info("Lost %s (device %d)", dev.name, number)
+
+    def _supervise(self) -> None:
+        """Join the network, keep the connection alive, and repair it when the
+        cabling, the players or this Mac's address change."""
+        log.info("Looking for Pro DJ Link devices...")
+        searching_since = time.monotonic()
+        first_join = True
+        bcast, ip_bytes = "", b""
+        joined = next_keepalive = 0.0
+        warned_status = False
         while self.alive:
-            pkt = keepalive_packet(self.NAME, self.number, self.mac, ip, max(1, len(self.devices)))
-            try:
-                self.announce_sock.sendto(pkt, (bcast, ANNOUNCE_PORT))
-            except OSError as e:
-                log.warning("keep-alive failed: %s", e)
-            if not warned and not self.status_seen and time.monotonic() - joined > self.status_timeout:
-                warned = True
-                log.warning(self._no_status_advice())
-            time.sleep(1.5)
+            now = time.monotonic()
+            self._expire_devices(now)
+            ifaces = self.list_ifaces()
+            ours = self.net.local_ips(ifaces) | ({self.local_ip} if self.local_ip else set())
+            devices = sorted(self.devices.values(), key=lambda d: d.number)
+            peers = [d for d in devices if d.ip not in ours] or devices
+
+            if not peers:
+                if self.number:
+                    log.info("All DJ Link devices are gone; waiting for them to come back")
+                    self.number, self.local_ip = 0, None
+                    searching_since = now
+                if now - searching_since > self.search_grace:
+                    self._set_problem(self.net.nothing_found_advice(ifaces))
+                time.sleep(0.5)
+                continue
+
+            peer = peers[0]
+            iface, addr = self.net.find_addr_for(peer.ip, ifaces)
+            if addr is None and peer.ip in ours:  # only other apps on this Mac (and tests)
+                iface, addr = next(((i, a) for i in ifaces for a in i.addrs if a.ip == peer.ip), (None, None))
+            if addr is None:
+                self._repair_subnet(peer, ifaces)
+                time.sleep(1.0)
+                continue
+
+            if self.number == 0 or addr.ip != self.local_ip:
+                if self.number:
+                    log.info("This Mac's network address changed to %s; rejoining", addr.ip)
+                if first_join:
+                    time.sleep(self.startup_wait)  # let every device announce itself first
+                self.local_ip = addr.ip
+                self.mac = (iface.mac if iface and iface.mac else uuid.getnode().to_bytes(6, "big"))
+                bcast = self.broadcast or addr.broadcast
+                ip_bytes = socket.inet_aton(addr.ip)
+                previous = self.number
+                if not self._claim(ip_bytes, bcast, prefer=previous):
+                    self._set_problem("Could not get a device number on the DJ Link network: "
+                                      "too many devices are connected.")
+                    time.sleep(2.0)
+                    continue
+                first_join = False
+                joined, warned_status, next_keepalive = time.monotonic(), False, 0.0
+                self.status_seen.clear()
+                log.info("Joined the network as device %d (%s on %s, broadcast %s)", self.number,
+                         addr.ip, iface.label if iface else "?", bcast)
+                self._set_problem(None)
+
+            if now >= next_keepalive:
+                next_keepalive = now + 1.5
+                pkt = keepalive_packet(self.NAME, self.number, self.mac, ip_bytes, max(1, len(self.devices)))
+                try:
+                    self.announce_sock.sendto(pkt, (bcast, ANNOUNCE_PORT))
+                    if self.problem and self.problem.startswith("macOS is blocking"):
+                        self._set_problem(None)
+                except OSError as e:
+                    self._set_problem(self._send_error_advice(e))
+            if not warned_status and not self.status_seen and now - joined > self.status_timeout:
+                warned_status = True
+                self._set_problem(self._no_status_advice())
+            elif self.status_seen and self.problem and self.problem.startswith("Not receiving"):
+                self._set_problem(None)
+            time.sleep(0.25)
+
+    def _repair_subnet(self, peer: Device, ifaces: list) -> None:
+        """A player is on a network this Mac has no address on (typically a CDJ
+        stuck on an old IP). Give the Mac's Ethernet port an address next to it."""
+        net = self.net.guess_network(peer.ip)
+        wired = self.net.wired_with_link(ifaces)
+        mine = ", ".join(a.ip for i in wired for a in i.addrs) or "no address"
+        base = (f"{peer.name} is at {peer.ip}, but this Mac's Ethernet is on {mine}, "
+                "so they can't talk directly.")
+        if not wired:
+            self._set_problem(base + " " + self.net.nothing_found_advice(ifaces))
+            return
+        if not self.fix_network:
+            self._set_problem(base + f" Restart the player, or run: sudo ifconfig {wired[0].name} alias "
+                              f"<free address on {net}> netmask {net.netmask}")
+            return
+        if str(net) in self.fix_attempted:
+            return
+        self.fix_attempted.add(str(net))
+        taken = {d.ip for d in self.devices.values()} | self.net.local_ips(ifaces)
+        ip, mask = self.net.choose_alias_ip(peer.ip, taken)
+        log.info("%s Adding %s to %s so this Mac can reach it (macOS will ask for your password)...",
+                 base, ip, wired[0].label)
+        ok, detail = self.add_alias(wired[0].name, ip, mask)
+        if ok:
+            log.info("Network fixed: this Mac now also has %s on %s", ip, wired[0].label)
+            self._set_problem(None)
+        else:
+            self._set_problem(f"{base} Automatic fix failed ({detail}). Restart the player so it picks "
+                              "up a new address, or check that the Mac and players share one switch.")
+
+    @staticmethod
+    def _send_error_advice(err: OSError) -> str:
+        if err.errno in (65, 13):  # EHOSTUNREACH / EACCES: macOS Local Network privacy
+            return ("macOS is blocking this app from the local network. Open System Settings > "
+                    "Privacy & Security > Local Network and switch on Terminal (or ProLink Sync).")
+        return f"Can't send to the DJ Link network ({err.strerror}). Check the Ethernet cable and switch."
 
     def _no_status_advice(self) -> str:
         """Explain why no player status is arriving, naming any app sharing this Mac."""
@@ -706,12 +795,20 @@ class VirtualCdj:
         return ("Not receiving player status. Check that no other DJ Link app (rekordbox, Bridge, "
                 "ShowKontrol) is running on this Mac, then restart this app.")
 
-    def _claim(self, ip: bytes, bcast: str) -> None:
-        send = lambda pkt: self.announce_sock.sendto(pkt, (bcast, ANNOUNCE_PORT))  # noqa: E731
+    def _claim(self, ip: bytes, bcast: str, prefer: int = 0) -> bool:
+        def send(pkt: bytes) -> None:
+            try:
+                self.announce_sock.sendto(pkt, (bcast, ANNOUNCE_PORT))
+            except OSError as e:
+                self._set_problem(self._send_error_advice(e))
+
         for _ in range(3):
             send(hello_packet(self.NAME))
             time.sleep(self.claim_interval)
-        candidates = [self.requested_number] if self.requested_number else list(range(7, 16))
+        if self.requested_number:
+            candidates = [self.requested_number]
+        else:
+            candidates = ([prefer] if prefer else []) + [n for n in range(7, 16) if n != prefer]
         for number in candidates:
             if number in self.devices and not self.requested_number:
                 continue
@@ -727,9 +824,9 @@ class VirtualCdj:
                     break
             if not self.claim_rejected:
                 self.number = number
-                return
+                return True
             log.info("Device number %d is taken, trying another", number)
-        raise SystemExit("Could not claim a device number on the DJ Link network")
+        return False
 
     # -- status --------------------------------------------------------------
 

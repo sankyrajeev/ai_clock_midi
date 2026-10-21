@@ -7,7 +7,7 @@ import pytest
 import phrases as ph
 import waveform as wf
 from phrases import BREAKDOWN, BUILD, DROP, INTRO, OUTRO, VERSE, PhraseTracker, build_status_packet, parse_status
-from test_phrases import MAC, FakeDbServer
+from test_phrases import MAC, FakeDbServer, loopback_ifaces
 
 BPM = 128.0
 EPS = wf.ENTRIES_PER_SECOND
@@ -120,6 +120,7 @@ def test_virtual_cdj_falls_back_to_waveform_when_no_phrases():
     except OSError as e:
         pytest.skip(f"cannot bind DJ Link ports here: {e}")
     vcdj.startup_wait, vcdj.claim_interval, vcdj.db_query_port = 0.1, 0.01, srv.query_port
+    vcdj.list_ifaces = loopback_ifaces
     vcdj.start()
     out = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:

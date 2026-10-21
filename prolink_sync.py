@@ -430,6 +430,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     net.add_argument("--pose-as", type=int, default=0,
                      help="player number to present to the CDJ database (default: automatic)")
     net.add_argument("--broadcast", help="DJ Link broadcast address (default: detected)")
+    net.add_argument("--no-fix-network", action="store_true",
+                     help="don't add a matching network address when a player is on another subnet")
     net.add_argument("--demo", action="store_true",
                      help="play a fake 128 BPM track through the phrase cues (MIDI-learn without decks)")
     cues = ap.add_argument_group("section cues from the mixer's audio over USB (backup / fallback)")
@@ -520,7 +522,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 log.info("Demo: fake track Intro > Up > Chorus > Down > Up > Chorus > Outro at 128 BPM")
             else:
                 vcdj = VirtualCdj(tracker, number=args.player_number, posing_as=args.pose_as,
-                                  bind=args.bind, broadcast=args.broadcast)
+                                  bind=args.bind, broadcast=args.broadcast,
+                                  fix_network=not args.no_fix_network)
                 vcdj.start()
             if args.cues:
                 from sections import AudioInput, SectionDetector
@@ -550,7 +553,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     last_status = [""]
 
     def status(line: str) -> None:
-        if tracker:
+        if vcdj and vcdj.problem:
+            line = "[network problem: see message above]  " + line
+        elif tracker:
             line = f"[{tracker.current()}]  " + line
         elif audio:
             line += f"  [{(audio.detector.state or 'listening').upper()}]"
