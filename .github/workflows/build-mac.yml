@@ -37,6 +37,7 @@ jobs:
       - name: Check the app starts
         run: |
           "build/dist/Lumiere Link.app/Contents/MacOS/Lumiere Link" --help
+          "build/dist/Lumiere Link.app/Contents/MacOS/Lumiere Link" --self-test
       - uses: actions/upload-artifact@v4
         with:
           name: Lumiere-Link-${{ matrix.runner }}

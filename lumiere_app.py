@@ -25,7 +25,10 @@ def main(argv=None) -> int:
     ap.add_argument("--browser", action="store_true", help="open the screen in the web browser")
     ap.add_argument("--port", type=int, default=0, help="screen server port (default: any free port)")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
+    if args.self_test:
+        return self_test()
 
     log_dir = app_data_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -58,6 +61,43 @@ def main(argv=None) -> int:
         server.stop()
         engine.stop()
     return 0
+
+
+def self_test() -> int:
+    """Used by the build: checks the bundled app has everything it needs."""
+    import json
+    import tempfile
+    import time
+    import urllib.request
+    from pathlib import Path
+
+    import rtmidi  # noqa: F401  (MIDI ports for Lightkey)
+    import webview  # noqa: F401  (the window library must be bundled)
+
+    tmp = Path(tempfile.mkdtemp())
+    engine = LumiereEngine(data_dir=tmp / "data", projects_dir=tmp / "projects", demo=True)
+    engine.start()
+    server = AppServer(engine)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        page = urllib.request.urlopen(base + "/").read().decode()
+        assert "Lumi" in page, "screen missing"
+        for asset in ("/fonts/Manrope.ttf", "/assets/brand/va-logo-white.png"):
+            urllib.request.urlopen(base + asset).read()
+        req = urllib.request.Request(base + "/api/state", headers={"X-Token": server.token})
+        for _ in range(40):
+            state = json.loads(urllib.request.urlopen(req).read())
+            if any(d.get("title") for d in state["decks"]):
+                break
+            time.sleep(0.5)
+        else:
+            raise AssertionError("demo decks never loaded a track")
+        print("self-test ok:", [d["title"] for d in state["decks"] if d.get("title")])
+        return 0
+    finally:
+        server.stop()
+        engine.stop()
 
 
 if __name__ == "__main__":
