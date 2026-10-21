@@ -4,7 +4,7 @@
 Listens passively for Pro DJ Link beat packets (UDP 50001) from CDJs and the
 DJM mixer, follows the tempo master, and drives:
 
-  * a virtual MIDI port ("ProLink Clock") emitting 24 ppqn MIDI clock that is
+  * a virtual MIDI port ("Lumiere Clock") emitting 24 ppqn MIDI clock that is
     phase-locked to the beats coming off the decks, with Start on a downbeat
     so bars line up, and
   * optionally an Ableton Link session with the same tempo and bar phase.
@@ -26,6 +26,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, Optional
 
 log = logging.getLogger("prolink_sync")
@@ -398,6 +399,31 @@ def simulate(bpm: float, device: int, stop: threading.Event) -> None:
         time.sleep(max(0.0, nxt - time.monotonic()))
 
 
+def _learn(args, seq_pools) -> int:
+    """Interactive MIDI Learn helper: sends each pool sequence's note on request."""
+    import pools as pl
+    from phrases import CueMidi
+
+    if seq_pools is None or not seq_pools.pools:
+        log.error("No sequence pools are switched on; check %s", args.pools)
+        return 1
+    try:
+        out = CueMidi(args.cue_port, args.existing_port)
+    except Exception as e:  # noqa: BLE001 - surface any backend error plainly
+        log.error("Could not open MIDI port %r: %s", args.cue_port, e)
+        return 1
+    print(f"\nMIDI Learn helper. In Lightkey, make sure the input {args.cue_port!r} is enabled.")
+    print("For each sequence: put it into MIDI Learn in Lightkey, then press Enter here.")
+    try:
+        pl.learn(out.note, seq_pools, None if args.learn == "all" else args.learn)
+    except (KeyboardInterrupt, EOFError):
+        print()
+    finally:
+        time.sleep(0.2)  # let the last note-off go out
+        out.close()
+    return 0
+
+
 def _with_loopback(list_ifaces):
     """The simulated booth lives on 127.0.0.1; make sure that interface is listed."""
     import netinfo
@@ -415,7 +441,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--source", default="auto",
                     help="auto (default: mixer, else a playing deck), mixer, or player number 1-6")
-    ap.add_argument("--midi-port", default="ProLink Clock",
+    ap.add_argument("--midi-port", default="Lumiere Clock",
                     help="MIDI output port name (default: %(default)s)")
     ap.add_argument("--existing-port", action="store_true",
                     help="send to an existing port (e.g. 'IAC Driver Bus 1') instead of creating a virtual one")
@@ -433,6 +459,13 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="just print every beat packet from every device, no output")
     ap.add_argument("--simulate", type=float, metavar="BPM",
                     help="generate fake beat packets at BPM locally (testing without gear)")
+    pool = ap.add_argument_group("sequence pools (each drop, build, ... picks one of up to 24 sequences)")
+    pool.add_argument("--pools", default=str(Path(__file__).with_name("pools.json")),
+                      help="pool settings file (default: pools.json next to this app; created if missing)")
+    pool.add_argument("--no-pools", action="store_true", help="send only the single cue note per section")
+    pool.add_argument("--learn", nargs="?", const="all", metavar="POOL",
+                      help="step through every sequence so Lightkey can MIDI-learn it, then exit "
+                           "(optionally just one pool, e.g. --learn drop)")
     net = ap.add_argument_group("phrase cues over the network (rekordbox phrase analysis, no audio cable)")
     net.add_argument("--phrases", action="store_true",
                      help="join the DJ Link network and cue lights from each track's rekordbox phrases")
@@ -454,7 +487,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     cues = ap.add_argument_group("section cues from the mixer's audio over USB (backup / fallback)")
     cues.add_argument("--cues", action="store_true",
                       help="listen to the mixer audio and send section cues + levels as MIDI")
-    cues.add_argument("--cue-port", default="ProLink Cues",
+    cues.add_argument("--cue-port", default="Lumiere Cues",
                       help="MIDI port for cues (default: %(default)s)")
     cues.add_argument("--audio-device", help="audio input name or number (default: a DJM if attached)")
     cues.add_argument("--audio-channels", default="1,2",
@@ -472,6 +505,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             handler.terminator = "\n"
             fmt = handler.formatter
             handler.setFormatter(logging.Formatter("\r\033[K" + fmt._fmt, fmt.datefmt))
+
+    seq_pools = None
+    if not args.no_pools:
+        from pools import SequencePools, load_config
+        seq_pools = SequencePools(load_config(Path(args.pools)))
+    if args.learn:
+        return _learn(args, seq_pools)
 
     if args.list_audio:
         from sections import list_audio_devices
@@ -542,7 +582,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         try:
             from phrases import CueMidi, PhraseTracker, VirtualCdj, run_demo
             gate = (lambda: tracker.has_phrases()) if args.cues else None
-            cue_out = CueMidi(args.cue_port, args.existing_port, gate=gate)
+            cue_out = CueMidi(args.cue_port, args.existing_port, gate=gate, pools=seq_pools)
             tracker = PhraseTracker(cue_out.event, cue_out.level, follow=args.follow,
                                     lead=args.latency_ms / 1000.0)
             if args.demo:
@@ -567,11 +607,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             return 1
     elif args.cues:
         try:
-            from sections import AudioInput, CueOutput, SectionDetector
-            cue_out = CueOutput(args.cue_port, args.existing_port)
+            from phrases import CueMidi
+            from sections import AudioInput, SectionDetector
+            cue_out = CueMidi(args.cue_port, args.existing_port, pools=seq_pools)
             channels = [int(c) for c in args.audio_channels.split(",")]
             audio = AudioInput(args.audio_device, channels,
-                               lambda sr: SectionDetector(sr, cue_out.event, cue_out.levels))
+                               lambda sr: SectionDetector(sr, cue_out.audio_event, cue_out.audio_levels))
             audio.start()
         except ImportError as e:
             log.error("--cues needs numpy and sounddevice (pip install -r requirements.txt): %s", e)
@@ -586,7 +627,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         if vcdj and vcdj.problem:
             line = "[network problem: see message above]  " + line
         elif tracker:
-            line = f"[{tracker.current()}]  " + line
+            pick = getattr(cue_out, "last_pick", "")
+            line = f"[{tracker.current()}{' · ' + pick if pick else ''}]  " + line
         elif audio:
             line += f"  [{(audio.detector.state or 'listening').upper()}]"
         if sys.stdout.isatty():

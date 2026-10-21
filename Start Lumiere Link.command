@@ -1,5 +1,5 @@
 #!/bin/bash
-# Double-click in Finder: MIDI clock + phrase cues from rekordbox analysis, over the DJ Link network.
+# Double-click in Finder to start Lumiere Link: MIDI clock + lighting cues for Lightkey, over the DJ Link network.
 # Add --cues to ARGS to also use the USB-audio detector for tracks without phrase data.
 # First run sets up its Python environment automatically (needs internet).
 # Extra options can be added to ARGS, e.g. ARGS=(--link) or ARGS=(--source 1).
@@ -17,7 +17,7 @@ if [ ! -x .venv/bin/python3 ] || [ requirements.txt -nt .venv/.installed ]; then
         read -r -p "Press Enter to close."; exit 1; }
 fi
 
-echo "Clock + network phrase cues. Lightkey: tempo = MIDI Clock \"ProLink Clock\"; MIDI-learn cues from \"ProLink Cues\"."
+echo "Lumiere Link is running. Lightkey: tempo = MIDI Clock \"Lumiere Clock\"; MIDI-learn cues from \"Lumiere Cues\"."
 echo "Close this window (or press Ctrl-C) to stop."
 echo
 .venv/bin/python3 prolink_sync.py "${ARGS[@]}" "$@"

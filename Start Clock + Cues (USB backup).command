@@ -16,7 +16,7 @@ if [ ! -x .venv/bin/python3 ] || [ requirements.txt -nt .venv/.installed ]; then
         read -r -p "Press Enter to close."; exit 1; }
 fi
 
-echo "Clock + cues. In Lightkey: tempo = MIDI Clock \"ProLink Clock\"; MIDI-learn cues from \"ProLink Cues\"."
+echo "Clock + cues. In Lightkey: tempo = MIDI Clock \"Lumiere Clock\"; MIDI-learn cues from \"Lumiere Cues\"."
 echo "Close this window (or press Ctrl-C) to stop."
 echo
 .venv/bin/python3 prolink_sync.py "${ARGS[@]}" "$@"

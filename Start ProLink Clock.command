@@ -16,7 +16,7 @@ if [ ! -x .venv/bin/python3 ] || [ requirements.txt -nt .venv/.installed ]; then
         read -r -p "Press Enter to close."; exit 1; }
 fi
 
-echo "Pro DJ Link -> Lightkey clock. In Lightkey pick MIDI Clock input \"ProLink Clock\"."
+echo "Pro DJ Link -> Lightkey clock. In Lightkey pick MIDI Clock input \"Lumiere Clock\"."
 echo "Close this window (or press Ctrl-C) to stop."
 echo
 .venv/bin/python3 prolink_sync.py "${ARGS[@]}" "$@"

@@ -579,7 +579,7 @@ class VirtualCdj:
     """Joins the DJ Link network as a player so CDJs send us their status, and
     downloads phrase analysis for each track that gets loaded."""
 
-    NAME = "ProLink Sync"
+    NAME = "Lumiere Link"
     startup_wait = 2.5      # seconds to watch the network before claiming a number
     claim_interval = 0.3    # spacing of the claim packets, as real players do
     db_query_port = DB_QUERY_PORT
@@ -916,23 +916,41 @@ class VirtualCdj:
 class CueMidi:
     """MIDI port for cues; also accepts events from the USB-audio detector."""
 
-    def __init__(self, port_name: str, use_existing: bool, gate: Optional[Callable[[], bool]] = None):
+    def __init__(self, port_name: str, use_existing: bool, gate: Optional[Callable[[], bool]] = None,
+                 pools=None):
         import mido
 
         self._mido = mido
         self.port = mido.open_output(port_name, virtual=not use_existing)
         self.gate = gate  # when it returns True, audio-detector cues are suppressed
+        self.pools = pools  # pools.SequencePools: pick one of several sequences per section
+        self.last_pick = ""
         self._lock = threading.Lock()
         self._last_cc: dict[int, int] = {}
         log.info("MIDI cues on port %r: %s", port_name,
                  ", ".join(f"{k}={v}" for k, v in NOTES.items()))
+        if pools is not None:
+            log.info("Sequence pools: %s", pools.describe())
 
     def event(self, name: str) -> None:
         note = NOTES.get(name)
         if note is None:
             return
-        self._send("note_on", note=note, velocity=127)
-        threading.Timer(0.08, self._send, ("note_off",), {"note": note, "velocity": 0}).start()
+        self.note(1, note)
+        choice = self.pools.choose(name) if self.pools is not None else None
+        if choice:
+            channel, pool_note, seq = choice
+            self.note(channel, pool_note)
+            count = self.pools.pools[name].count
+            self.last_pick = f"{name.replace('_', '-')} {seq}/{count}"
+            log.info("%s: sequence %d of %d (channel %d, note %d)",
+                     name.replace("_", "-").capitalize(), seq, count, channel, pool_note)
+
+    def note(self, channel: int, note: int) -> None:
+        """Send a short note on a 1-based MIDI channel."""
+        self._send("note_on", channel=channel - 1, note=note, velocity=127)
+        threading.Timer(0.08, self._send, ("note_off",),
+                        {"channel": channel - 1, "note": note, "velocity": 0}).start()
 
     def level(self, cc: int, value: float) -> None:
         v = max(0, min(127, int(round(value * 127))))
@@ -951,9 +969,9 @@ class CueMidi:
             if not (phrases and cc in (CC_ENERGY, CC_BUILD)):
                 self.level(cc, lv[name])
 
-    def _send(self, kind: str, **kw) -> None:
+    def _send(self, kind: str, channel: int = 0, **kw) -> None:
         with self._lock:
-            self.port.send(self._mido.Message(kind, channel=0, **kw))
+            self.port.send(self._mido.Message(kind, channel=channel, **kw))
 
     def close(self) -> None:
         self.port.close()
