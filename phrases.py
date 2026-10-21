@@ -406,6 +406,7 @@ class PhraseTracker:
         self.lead = lead
         self.decks: dict[int, Deck] = {}
         self.analysis: dict[tuple[int, int, int], Optional[TrackPhrases]] = {}
+        self.waveforms: dict[tuple[int, int, int], object] = {}  # waveform.Bands, for the screen
         self.lock = threading.RLock()
         self.followed: Optional[int] = None
         self.announced: Optional[tuple] = None   # (deck, track_key, phrase index) last announced
@@ -499,7 +500,8 @@ class PhraseTracker:
             if choice is None and self.followed in fresh:
                 choice = self.followed  # keep following a paused deck
         if choice != self.followed:
-            log.info("Following deck %s for phrases", choice)
+            if choice is not None:
+                log.info("Following deck %s for phrases", choice)
             self.followed = choice
 
     def _check_position(self, now: float) -> None:
@@ -879,31 +881,31 @@ class VirtualCdj:
         posing = self.posing_as or (self.number if 1 <= self.number <= 4 else st.track_player)
         client = DbClient(source.ip, posing, query_port=self.db_query_port)
         try:
+            phrases = None
             if st.track_type == 1:
                 blob = client.anlz_tag(st.slot, st.track_type, st.rekordbox_id, "PSSI", "EXT")
                 if blob:
                     tp = parse_pssi(blob)
-                    if tp.phrases:
-                        return tp
-            return self._from_waveform(client, st)
+                    phrases = tp if tp.phrases else None
+            from_wave = self._from_waveform(client, st)  # also keeps the waveform for display
+            return phrases or from_wave
         finally:
             client.close()
 
-    @staticmethod
-    def _from_waveform(client: "DbClient", st: CdjStatus) -> Optional[TrackPhrases]:
-        """No phrase analysis: work the sections out from the waveform instead."""
+    def _from_waveform(self, client: "DbClient", st: CdjStatus) -> Optional[TrackPhrases]:
+        """Download the track's waveform (kept for the screen) and work the sections out
+        from it, for when there is no phrase analysis."""
         import waveform
 
         grid_blob = client.beat_grid(st.slot, st.track_type, st.rekordbox_id)
         grid = waveform.parse_beat_grid(grid_blob) if grid_blob else []
-        if not grid:
-            return None
         for tag, ext in waveform.WAVEFORM_TAGS:
             blob = client.anlz_tag(st.slot, st.track_type, st.rekordbox_id, tag, ext)
             bands = waveform.parse_waveform(blob) if blob else None
             if bands is not None and len(bands.low):
-                log.debug("analysing %s waveform (%d entries)", tag, len(bands.low))
-                return waveform.analyse(bands, grid)
+                self.tracker.waveforms[st.track_key] = bands
+                log.debug("got %s waveform (%d entries)", tag, len(bands.low))
+                return waveform.analyse(bands, grid) if grid else None
         return None
 
 

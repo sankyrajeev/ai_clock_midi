@@ -1,8 +1,10 @@
 #!/bin/bash
-# Double-click in Finder: plays a fake track through the cues so you can MIDI-learn them in Lightkey.
+# Double-click in Finder: runs a pretend booth (2 x CDJ-3000X + DJM-V10) on this Mac and connects to it.
+# Everything works as with real gear: clock, phrase cues, waveform analysis, deck changes.
+# Add --simulate-dropout 60 to ARGS to pull the pretend network cable for 10 s after a minute.
 # First run sets up its Python environment automatically (needs internet).
 # Extra options can be added to ARGS, e.g. ARGS=(--link) or ARGS=(--source 1).
-ARGS=(--demo --simulate 128)
+ARGS=(--simulate-booth)
 
 cd "$(dirname "$0")" || exit 1
 
@@ -16,7 +18,7 @@ if [ ! -x .venv/bin/python3 ] || [ requirements.txt -nt .venv/.installed ]; then
         read -r -p "Press Enter to close."; exit 1; }
 fi
 
-echo "Demo: cycling Intro, Build, Pre-drop, Drop, Breakdown, Outro every few seconds at 128 BPM."
+echo "Simulated booth: deck 2 plays a track with rekordbox phrases, deck 1 mixes in one without. Lightkey works as with real gear."
 echo "Close this window (or press Ctrl-C) to stop."
 echo
 .venv/bin/python3 prolink_sync.py "${ARGS[@]}" "$@"

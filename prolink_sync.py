@@ -398,6 +398,19 @@ def simulate(bpm: float, device: int, stop: threading.Event) -> None:
         time.sleep(max(0.0, nxt - time.monotonic()))
 
 
+def _with_loopback(list_ifaces):
+    """The simulated booth lives on 127.0.0.1; make sure that interface is listed."""
+    import netinfo
+
+    def wrapped():
+        ifaces = list_ifaces()
+        if not any(a.ip == "127.0.0.1" for i in ifaces for a in i.addrs):
+            ifaces.append(netinfo.Iface("lo0", up=True,
+                                        addrs=[netinfo.Addr("127.0.0.1", "255.0.0.0", "127.255.255.255")]))
+        return ifaces
+    return wrapped
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--source", default="auto",
@@ -432,6 +445,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     net.add_argument("--broadcast", help="DJ Link broadcast address (default: detected)")
     net.add_argument("--no-fix-network", action="store_true",
                      help="don't add a matching network address when a player is on another subnet")
+    net.add_argument("--simulate-booth", action="store_true",
+                     help="run a pretend booth (2 x CDJ-3000X + DJM-V10) on this Mac and connect to it")
+    net.add_argument("--simulate-dropout", type=float, metavar="SECONDS",
+                     help="with --simulate-booth: pull the pretend network cable for 10 s after this many seconds")
     net.add_argument("--demo", action="store_true",
                      help="play a fake 128 BPM track through the phrase cues (MIDI-learn without decks)")
     cues = ap.add_argument_group("section cues from the mixer's audio over USB (backup / fallback)")
@@ -510,6 +527,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 1
 
     audio = cue_out = tracker = vcdj = None
+    rig = None
+    if args.simulate_booth:
+        from simrig import SimRig
+        args.phrases = True
+        args.broadcast = args.broadcast or "127.0.0.1"
+        try:
+            rig = SimRig(dropout_after=args.simulate_dropout)
+        except OSError as e:
+            log.error("Could not start the simulated booth: %s", e)
+            return 1
+        rig.start()
     if args.phrases or args.demo:
         try:
             from phrases import CueMidi, PhraseTracker, VirtualCdj, run_demo
@@ -524,6 +552,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 vcdj = VirtualCdj(tracker, number=args.player_number, posing_as=args.pose_as,
                                   bind=args.bind, broadcast=args.broadcast,
                                   fix_network=not args.no_fix_network)
+                if rig:
+                    vcdj.list_ifaces = _with_loopback(vcdj.list_ifaces)
                 vcdj.start()
             if args.cues:
                 from sections import AudioInput, SectionDetector
@@ -592,6 +622,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             audio.close()
         if vcdj:
             vcdj.close()
+        if rig:
+            rig.stop()
         if cue_out:
             cue_out.close()
         sock.close()

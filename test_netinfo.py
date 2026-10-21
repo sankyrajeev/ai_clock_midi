@@ -220,3 +220,32 @@ def test_mac_address_change_triggers_rejoin():
 def test_local_network_permission_error_is_explained():
     err = OSError(65, "No route to host")
     assert "Local Network" in ph.VirtualCdj._send_error_advice(err)
+
+
+def test_simulated_booth_serves_phrases_and_waveforms():
+    """The pretend booth: deck 2 has rekordbox phrases, deck 1 only a waveform."""
+    import simrig
+    try:
+        rig = simrig.SimRig()
+    except OSError as e:
+        pytest.skip(f"cannot start the simulated booth here: {e}")
+    tracker = ph.PhraseTracker(lambda e: None, lambda cc, v: None)
+    net = FakeNet([ni.Iface("lo0", up=True, addrs=[ni.Addr("127.0.0.1", "255.0.0.0", "127.255.255.255")])])
+    v = make_vcdj(net)
+    v.db_query_port = rig.db.query.getsockname()[1]
+    rig.start()
+    v.start()
+    try:
+        assert wait_for(lambda: len(tracker_analyses(v)) == 2, timeout=10)
+        sources = {key[0]: tp.source for key, tp in tracker_analyses(v).items()}
+        assert sources == {1: "waveform", 2: "rekordbox"}
+        assert len(v.tracker.waveforms) == 2  # kept for drawing on screen
+        cues = [p.cue for p in tracker_analyses(v)[(1, 3, 1002)].phrases]
+        assert cues == [ph.INTRO, ph.DROP, ph.BREAKDOWN, ph.BUILD, ph.DROP, ph.OUTRO]
+    finally:
+        v.close()
+        rig.stop()
+
+
+def tracker_analyses(v):
+    return {k: tp for k, tp in v.tracker.analysis.items() if tp}

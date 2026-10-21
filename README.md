@@ -42,7 +42,8 @@ branch.
 1. Download the repo: `git clone https://github.com/sankyrajeev/ai_clock_midi`,
    or use **Code → Download ZIP** on GitHub and unzip it.
 2. In Finder, double-click **`Check Beats.command`** and press play on a deck.
-   Beat lines should appear.
+   Beat lines should appear. No decks to hand? **`Simulate Booth (no gear).command`**
+   runs a pretend booth on the Mac instead.
 3. Double-click **`Start Clock + Phrases (network).command`** and leave the
    window open. In Lightkey, set the tempo source to **MIDI Clock → ProLink
    Clock** and MIDI-learn the cues from **ProLink Cues**.
@@ -50,7 +51,7 @@ branch.
 | Launcher | What it does |
 |---|---|
 | `Start Clock + Phrases (network).command` | **Recommended.** Clock + phrase cues over the DJ Link network |
-| `Demo Cues (no decks).command` | Cycles through every cue at 128 BPM so you can MIDI-learn them in Lightkey |
+| `Simulate Booth (no gear).command` | A pretend booth (2 × CDJ-3000X + DJM-V10) on this Mac, for testing and MIDI-learning without decks |
 | `Start ProLink Clock.command` | Clock only |
 | `Start Clock + Cues (USB backup).command` | Clock + cues detected from the DJM's audio over USB |
 | `Check Beats.command` | Shows the beat packets arriving from the decks |
@@ -229,7 +230,9 @@ Then use beat-synced effects / BPM-based cue timing in Lightkey as usual.
 | `--follow master\|on-air\|N` | Which deck drives the phrase cues (default `master`) |
 | `--player-number N` / `--pose-as N` | Device number to claim / player number shown to the CDJ database |
 | `--no-fix-network` | Don't add a matching Mac address when a player is stuck on another subnet |
-| `--demo` | Fake track through the phrase cues, for MIDI-learning |
+| `--simulate-booth` | Run a pretend booth on this Mac and connect to it over the real protocol |
+| `--simulate-dropout S` | With `--simulate-booth`: pull the pretend network cable for 10 s after S seconds |
+| `--demo` | Fake track straight into the cue engine (no network), for MIDI-learning |
 | `--cues` | Cues from the mixer audio over USB (fallback when used with `--phrases`) |
 
 ## Connecting
