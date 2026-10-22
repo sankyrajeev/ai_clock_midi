@@ -21,6 +21,8 @@ jobs:
 
   build:
     needs: test
+    env:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
     strategy:
       matrix:
         include:
@@ -32,7 +34,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Load the Developer ID certificate (only if it has been added)
+        if: ${{ env.MACOS_CERT_P12 != '' }}
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KC=$RUNNER_TEMP/signing.keychain-db; KP=$(uuidgen)
+          echo "$MACOS_CERT_P12" | base64 --decode > $RUNNER_TEMP/cert.p12
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import $RUNNER_TEMP/cert.p12 -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KP" "$KC"
+          security list-keychains -d user -s "$KC"
+          ID=$(security find-identity -v -p codesigning "$KC" | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
+          echo "DEVELOPER_ID=$ID" >> "$GITHUB_ENV"
       - name: Build the app and disk image
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: packaging/build_mac.sh
       - name: Check the app starts
         run: |

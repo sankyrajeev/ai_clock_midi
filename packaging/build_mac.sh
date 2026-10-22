@@ -23,8 +23,16 @@ iconutil -c icns "$ICONSET" -o build/AppIcon.icns
 build/venv/bin/pyinstaller --noconfirm --clean --distpath build/dist --workpath build/work packaging/LumiereLink.spec
 
 APP="build/dist/Lumiere Link.app"
-# Ad-hoc signature: required for Apple-silicon Macs to run the app at all.
-codesign --force --deep --sign - "$APP"
+if [ -n "${DEVELOPER_ID:-}" ]; then
+  # Signed with the Developer ID certificate (Apple Developer Program), so macOS
+  # opens it without warnings once it has also been notarized below.
+  codesign --force --deep --options runtime --timestamp \
+    --entitlements packaging/entitlements.plist --sign "$DEVELOPER_ID" "$APP"
+  codesign --verify --deep --strict "$APP"
+else
+  # Ad-hoc signature: enough for Apple-silicon Macs to run it, but macOS warns.
+  codesign --force --deep --sign - "$APP"
+fi
 
 # Disk image with a shortcut to Applications
 STAGE=build/dmg; rm -rf "$STAGE"; mkdir -p "$STAGE"
@@ -32,4 +40,14 @@ cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 DMG="build/Lumiere-Link-${VERSION}-${MAC}.dmg"
 hdiutil create -volname "Lumière Link" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+
+if [ -n "${DEVELOPER_ID:-}" ] && [ -n "${APPLE_ID:-}" ]; then
+  codesign --force --timestamp --sign "$DEVELOPER_ID" "$DMG"
+  # Apple checks the app for malware and returns a ticket; stapling it to the
+  # disk image lets macOS verify it even offline.
+  xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+    --password "$APPLE_APP_PASSWORD" --wait
+  xcrun stapler staple "$DMG"
+  spctl --assess --type open --context context:primary-signature -v "$DMG"
+fi
 echo "Built $DMG"
