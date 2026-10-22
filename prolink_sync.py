@@ -224,17 +224,23 @@ class MidiClockOutput:
     def __init__(self, port_name: str, use_existing: bool, transport: bool):
         import mido  # imported lazily so --monitor works without MIDI deps
 
+        from phrases import MIDI_LOCK
+
         self._mido = mido
+        self._lock = MIDI_LOCK
         if use_existing:
             self.port = mido.open_output(port_name)
         else:
             self.port = mido.open_output(port_name, virtual=True)
         self.transport = transport
         self.running = False
+        self._closed = False
         log.info("MIDI clock on port %r", port_name)
 
     def _send(self, status: int) -> None:
-        self.port.send(self._mido.Message.from_bytes([status]))
+        with self._lock:
+            if not self._closed:
+                self.port.send(self._mido.Message.from_bytes([status]))
 
     def clock(self) -> None:
         self._send(MIDI_CLOCK)
@@ -250,8 +256,10 @@ class MidiClockOutput:
         self.running = False
 
     def close(self) -> None:
-        self.stop()
-        self.port.close()
+        with self._lock:
+            self.stop()
+            self._closed = True
+            self.port.close()
 
 
 class LinkOutput:

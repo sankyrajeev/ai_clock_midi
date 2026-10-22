@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 VERSION=$(cat VERSION)
 ARCH=$(uname -m)
+# Name the download after the kind of Mac it is for, not the CPU code name.
+if [ "$ARCH" = "arm64" ]; then MAC="Apple-Silicon-M1-M2-M3-M4"; else MAC="Intel"; fi
 
 python3 -m venv build/venv
 build/venv/bin/python -m pip install -q --upgrade pip
@@ -28,6 +30,6 @@ codesign --force --deep --sign - "$APP"
 STAGE=build/dmg; rm -rf "$STAGE"; mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
-DMG="build/Lumiere-Link-${VERSION}-${ARCH}.dmg"
+DMG="build/Lumiere-Link-${VERSION}-${MAC}.dmg"
 hdiutil create -volname "Lumière Link" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 echo "Built $DMG"

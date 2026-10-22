@@ -84,11 +84,14 @@ on the Mac.
 
 1. Go to **https://github.com/sankyrajeev/ai_clock_midi/releases/tag/app-latest**.
 2. Under **Assets**, download the file for your Mac:
-   - **`…-arm64.dmg`** for Apple silicon (M1, M2, M3, M4 …)
-   - **`…-x86_64.dmg`** for older Intel Macs
+   - **`…-Apple-Silicon-M1-M2-M3-M4.dmg`** for Macs with an Apple M chip
+   - **`…-Intel.dmg`** for older Intel Macs
 
-   Not sure? Apple menu › **About This Mac**: "Chip: Apple M…" means arm64.
+   Not sure? Apple menu › **About This Mac**: "Chip: Apple M…" means Apple silicon.
+   The Intel version does run on an M Mac, but slower and less reliably, so pick the right one.
 3. Open the downloaded `.dmg` and drag **Lumière Link** onto **Applications**.
+   Then eject the disk image and always open the app **from Applications**,
+   not from the disk image window.
 
 ### 3.2 First launch
 

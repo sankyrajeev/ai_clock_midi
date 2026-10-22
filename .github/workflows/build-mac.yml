@@ -58,5 +58,9 @@ jobs:
         run: |
           gh release view app-latest >/dev/null 2>&1 || \
             gh release create app-latest --title "Lumière Link (latest build)" --target "$GITHUB_SHA" \
-              --notes "Download the .dmg for your Mac: arm64 = Apple silicon (M1 and later), x86_64 = Intel. Open it, drag Lumière Link into Applications, then open it. See README.md, part 3."
+              --notes "Download the .dmg for your Mac: Apple-Silicon for M1/M2/M3/M4 Macs, Intel for older Macs. Open it, drag Lumière Link into Applications, then open it from Applications. See README.md, part 3."
+          # Remove last build's files so only the current pair is offered.
+          for a in $(gh release view app-latest --json assets -q '.assets[].name'); do
+            gh release delete-asset app-latest "$a" -y
+          done
           gh release upload app-latest dmg/*.dmg --clobber

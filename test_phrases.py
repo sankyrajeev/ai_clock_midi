@@ -364,3 +364,49 @@ def test_warns_when_another_dj_link_app_shares_this_mac():
     assert "TCS-SHOWKONTROL is running on this Mac" in msg and "CDJ" not in msg
     vcdj.devices.pop(230)
     assert "no other DJ Link app" in vcdj._no_status_advice()
+
+
+def test_midi_sends_never_overlap_and_stop_after_close(monkeypatch):
+    """python-rtmidi crashes if two threads send at once (seen on a real Mac)."""
+    import mido
+
+    import prolink_sync as ps
+
+    state = {"inside": 0, "overlaps": 0, "after_close": 0}
+
+    class Port:
+        closed = False
+
+        def send(self, msg):
+            if self.closed:
+                state["after_close"] += 1
+            state["inside"] += 1
+            if state["inside"] > 1:
+                state["overlaps"] += 1
+            time.sleep(0.0002)
+            state["inside"] -= 1
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(mido, "open_output", lambda name, virtual=False: Port())
+    clock = ps.MidiClockOutput("Clock", False, True)
+    cues = ph.CueMidi("Cues", False)
+
+    def hammer(fn):
+        for _ in range(150):
+            fn()
+
+    threads = [threading.Thread(target=hammer, args=(f,)) for f in
+               (clock.clock, clock.clock, lambda: cues.note(2, 36), lambda: cues.level(20, 0.5))]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    cues.note(2, 40)  # its note-off fires after close
+    cues.close()
+    clock.close()
+    clock.clock()
+    time.sleep(0.15)
+    assert state["overlaps"] == 0
+    assert state["after_close"] == 0

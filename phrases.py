@@ -24,6 +24,11 @@ from dataclasses import dataclass, field
 from queue import Empty, Queue
 from typing import Callable, Optional
 
+# python-rtmidi is not thread-safe: the clock thread, cue timers and the app's
+# buttons all send MIDI, and two sends at once can crash the whole app. Every
+# MIDI send and close goes through this one lock.
+MIDI_LOCK = threading.RLock()
+
 log = logging.getLogger("prolink_sync.phrases")
 
 MAGIC = b"Qspt1WmJOL"
@@ -964,7 +969,8 @@ class CueMidi:
         self.gate = gate  # when it returns True, audio-detector cues are suppressed
         self.pools = pools  # pools.SequencePools: pick one of several sequences per section
         self.last_pick = ""
-        self._lock = threading.Lock()
+        self._lock = MIDI_LOCK
+        self._closed = False
         self._last_cc: dict[int, int] = {}
         log.info("MIDI cues on port %r: %s", port_name,
                  ", ".join(f"{k}={v}" for k, v in NOTES.items()))
@@ -1019,10 +1025,13 @@ class CueMidi:
 
     def _send(self, kind: str, channel: int = 0, **kw) -> None:
         with self._lock:
-            self.port.send(self._mido.Message(kind, channel=channel, **kw))
+            if not self._closed:  # a note-off timer can outlive the port
+                self.port.send(self._mido.Message(kind, channel=channel, **kw))
 
     def close(self) -> None:
-        self.port.close()
+        with self._lock:
+            self._closed = True
+            self.port.close()
 
 
 # Short sections so every cue comes round quickly while MIDI-learning.
