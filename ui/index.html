@@ -317,6 +317,10 @@ select:disabled { color: var(--tick); }
 .tile.last { box-shadow: inset 0 0 0 1.5px var(--brass), 0 3px 0 #141413, 0 0 14px rgba(184,164,123,.25); }
 .learning-on .tile:not(.unused) { box-shadow: inset 0 0 0 1.5px var(--violet), 0 3px 0 #141413; }
 .tile.flash { animation: glow .8s ease-out; }
+.tile.mapped { color: var(--ivory); background: linear-gradient(180deg, color-mix(in srgb, var(--pc) 34%, #2B2B29) 0%, color-mix(in srgb, var(--pc) 18%, var(--body)) 60%, #20201F 100%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pc) 70%, transparent), 0 3px 0 #141413, 0 0 12px color-mix(in srgb, var(--pc) 30%, transparent); }
+.tile.mapped .ok { background: var(--pc); color: #141413; box-shadow: none; font-weight: 700; }
+.tile .map { position: absolute; right: 8px; bottom: 5px; font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .08em; color: color-mix(in srgb, var(--pc) 80%, #fff); }
 .pick-opts { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
 .pick-opts .segbtn { width: 330px; }
 .saved { display: inline-flex; align-items: center; gap: 8px; color: var(--unit); font-size: 12.5px; }
@@ -718,11 +722,18 @@ body { padding: 0 !important; margin: 0; }
   const $ = id => document.getElementById(id);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const TOKEN = new URLSearchParams(location.search).get("t") || "";
+  // Rebuilding buttons that haven't changed makes clicks get lost (the button
+  // under the mouse is replaced mid-click) and costs a lot of CPU, so every
+  // list is only rewritten when its contents actually change.
+  const setHTML = (el, html) => { if (el._html !== html) { el._html = html; el.innerHTML = html; } };
 
   // ----- talking to the engine -----
   async function api(path, opts = {}) {
-    const r = await fetch(path, { ...opts, headers: { "X-Token": TOKEN, "Content-Type": "application/json" } });
-    return r.json();
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 4000);
+    try {
+      const r = await fetch(path, { ...opts, signal: ctl.signal, headers: { "X-Token": TOKEN, "Content-Type": "application/json" } });
+      return await r.json();
+    } finally { clearTimeout(timer); }
   }
   async function act(name, args = {}) {
     try {
@@ -800,7 +811,7 @@ body { padding: 0 !important; margin: 0; }
     mixers.forEach(d => leds.push(`<span class="led-chip"><span class="led"></span>${esc(d.name)}</span>`));
     if (!cdjs.length) leds.push(`<span class="led-chip empty"><span class="led off"></span>No CDJs yet</span>`);
     leds.push(`<span class="led-chip${S.ports.ok ? "" : " empty"}"><span class="led${S.ports.ok ? (S.live ? "" : " warn") : " off"}"></span>Lightkey</span>`);
-    $("leds").innerHTML = leds.join("");
+    setHTML($("leds"), leds.join(""));
     $("power").setAttribute("aria-pressed", String(S.live));
     $("powerTxt").textContent = S.live ? "Live" : "Paused";
     $("app").classList.toggle("paused", !S.live);
@@ -824,7 +835,7 @@ body { padding: 0 !important; margin: 0; }
   }
   function renderRack() {
     const f = shownDeck;
-    $("decks").innerHTML = S.decks.map(d => {
+    setHTML($("decks"), S.decks.map(d => {
       const state = d.master ? `<span class="state master">MASTER</span>` : d.playing ? `<span class="state onair">ON AIR</span>` : d.loaded ? `<span class="state">CUED</span>` : `<span class="state">EMPTY</span>`;
       if (!d.loaded) return `<button class="dcard empty" data-n="${d.n}"><div class="dc-top"><span class="dc-num">CDJ ${d.n}</span>${state}</div><div class="dc-meta"><span>No track loaded</span></div></button>`;
       const src = d.source ? `<span class="src" data-src="${d.source}">${d.source === "rekordbox" ? "Phrases" : "Waveform"}</span>` : `<span class="src" data-src="">${d.analysing ? "Reading…" : "No sections"}</span>`;
@@ -833,7 +844,7 @@ body { padding: 0 !important; margin: 0; }
         <div class="dc-title">${esc(d.title)}</div>
         <div class="dc-meta">${src}<span><b>${d.bpm ? d.bpm.toFixed(1) : "–"}</b> BPM</span></div>
         <div class="dc-strip">${segs(d)}<span class="ph" id="ph${d.n}"></span></div></button>`;
-    }).join("") || `<p class="rack-empty">CDJs appear here as soon as they're connected.</p>`;
+    }).join("") || `<p class="rack-empty">CDJs appear here as soon as they're connected.</p>`);
     $("rackCount").textContent = `${S.decks.length} player${S.decks.length === 1 ? "" : "s"} · up to 6`;
   }
   $("decks").addEventListener("click", e => {
@@ -950,14 +961,21 @@ body { padding: 0 !important; margin: 0; }
       return;
     }
     const n = wf.low.length, ps = wf.per_second, now = timeOfBeat(d, wf, b);
-    // overview
-    const head = Math.min(1, now / wf.duration_s) * ow;
-    for (let x = 0; x < ow; x++) {
-      const a = Math.floor(x / ow * n), e = Math.max(a + 1, Math.floor((x + 1) / ow * n)); let lo = 0, mi = 0, hi = 0;
-      for (let j = a; j < e; j++) { lo = Math.max(lo, wf.low[j]); mi = Math.max(mi, wf.mid[j]); hi = Math.max(hi, wf.high[j]); }
-      o.globalAlpha = x < head ? .35 : 1; column(o, x, 1, oh / 2, oh / 2 - 1, lo / 255, mi / 255, hi / 255);
+    // overview: drawn once per track and size, then copied each frame
+    const head = Math.min(1, now / wf.duration_s) * ow, ov = $("waveOverview");
+    if (!wf.cache || wf.cache.w !== ov.width || wf.cache.h !== ov.height) {
+      const cv = document.createElement("canvas"); cv.width = ov.width; cv.height = ov.height;
+      const g = cv.getContext("2d"), dpr = window.devicePixelRatio || 1; g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      for (let x = 0; x < ow; x++) {
+        const a = Math.floor(x / ow * n), e = Math.max(a + 1, Math.floor((x + 1) / ow * n)); let lo = 0, mi = 0, hi = 0;
+        for (let j = a; j < e; j++) { lo = Math.max(lo, wf.low[j]); mi = Math.max(mi, wf.mid[j]); hi = Math.max(hi, wf.high[j]); }
+        column(g, x, 1, oh / 2, oh / 2 - 1, lo / 255, mi / 255, hi / 255);
+      }
+      wf.cache = { w: ov.width, h: ov.height, canvas: cv };
     }
-    o.globalAlpha = 1; o.fillStyle = colours().high; o.fillRect(head - 1, 0, 2, oh);
+    o.save(); o.setTransform(1, 0, 0, 1, 0, 0); o.drawImage(wf.cache.canvas, 0, 0); o.restore();
+    o.fillStyle = "rgba(16,16,16,.62)"; o.fillRect(0, 0, head, oh);   // the part already played
+    o.fillStyle = colours().high; o.fillRect(head - 1, 0, 2, oh);
     // detail: 16 beats around the playhead
     const span = 16, t0 = timeOfBeat(d, wf, b - span / 2), t1 = timeOfBeat(d, wf, b + span / 2);
     for (let k = Math.ceil(b - span / 2); k <= b + span / 2; k++) {
@@ -974,8 +992,10 @@ body { padding: 0 !important; margin: 0; }
     g.addColorStop(0, "rgba(240,237,229,0)"); g.addColorStop(.5, "rgba(240,237,229,.10)"); g.addColorStop(1, "rgba(240,237,229,0)");
     c.fillStyle = g; c.fillRect(w / 2 - 14, 0, 28, h); c.fillStyle = colours().high; c.fillRect(Math.round(w / 2) - 1, 0, 2, h);
   }
-  function frame() {
-    if (S) {
+  let lastDraw = 0;
+  function frame(t) {
+    if (S && t - lastDraw > 30) {
+      lastDraw = t;
       drawWaves();
       S.decks.forEach(d => { const el = $("ph" + d.n); if (el && d.end_beat) el.style.left = `calc(${Math.min(100, (beatPos(d) - 1) / Math.max(1, d.end_beat - 1) * 100)}% - 1px)`; });
     }
@@ -987,14 +1007,15 @@ body { padding: 0 !important; margin: 0; }
     for (const [id, cue] of S.flashes) if (id > lastFlash) { flashPad(cue); lastFlash = id; }
     const latest = {};
     S.log.forEach(e => { if (e.seq && !latest[e.cue]) latest[e.cue] = `${e.seq}/${e.count}`; });
-    pads.querySelectorAll(".pad").forEach(p => p.querySelector(".pick").textContent = latest[p.dataset.id] || "");
-    $("log").innerHTML = S.log.map(e => {
+    pads.querySelectorAll(".pad").forEach(p => { const el = p.querySelector(".pick"), v = latest[p.dataset.id] || ""; if (el.textContent !== v) el.textContent = v; });
+    setHTML($("log"), S.log.map(e => {
       const c = byId[e.cue], col = c ? css(c.c) : css("--brass"), name = e.cue === "project" ? "PROJECT" : (c ? c.name : e.cue).toUpperCase();
       const t = new Date(e.t * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       return `<li><time>${t}</time><span class="tag2" style="--c:${col}">${esc(name)}</span><span class="where">${esc(e.where)}${e.seq ? ` · sequence ${e.seq}/${e.count}` : ""}</span></li>`;
-    }).join("");
+    }).join(""));
     const used = Object.values(S.pools.pools).filter(p => p.count).length;
-    $("seqBtnTxt").textContent = `Sequences · ${used} pool${used === 1 ? "" : "s"}`;
+    const label = `Sequences · ${used} pool${used === 1 ? "" : "s"}`;
+    if ($("seqBtnTxt").textContent !== label) $("seqBtnTxt").textContent = label;
   }
 
   // ----- problems -----
@@ -1067,17 +1088,18 @@ body { padding: 0 !important; margin: 0; }
     if ($("seqSheet").hidden) return;
     $("seqProj").textContent = `Project · ${S.project.name}`;
     const P = S.pools.pools;
-    $("poolList").innerHTML = POOL_META.map(([id, label, c]) => { const p = P[id];
+    setHTML($("poolList"), POOL_META.map(([id, label, c]) => { const p = P[id];
       return `<div class="prow${id === selPool ? " sel" : ""}${p.count ? "" : " off"}" data-id="${id}" style="--c:${css(c)}">
         <span class="chip"></span>
         <div><div class="nm">${label}</div><div class="sub">${p.count ? `ch ${p.channel} · ${p.learned.length}/${p.count} learned` : "off"}</div></div>
         <span class="stepper"><button data-d="-1" aria-label="Fewer ${label} sequences" ${p.count === 0 ? "disabled" : ""}>–</button><output>${p.count}</output><button data-d="1" aria-label="More ${label} sequences" ${p.count === 24 ? "disabled" : ""}>+</button></span>
-      </div>`; }).join("");
+      </div>`; }).join(""));
     const p = P[selPool], meta = POOL_META.find(m => m[0] === selPool);
     $("pdName").textContent = meta[1];
     $("pdSub").textContent = p.count ? `${p.count} sequence${p.count === 1 ? "" : "s"} · MIDI channel ${p.channel} · notes ${noteName(36)}–${noteName(35 + p.count)}` : "Switched off. Press + to add sequences.";
-    $("tiles").innerHTML = Array.from({ length: 24 }, (_, i) => { const n = i + 1, used = n <= p.count;
-      return `<button class="tile${used ? "" : " unused"}${used && p.last === n ? " last" : ""}" data-n="${n}" ${used ? "" : "disabled"} aria-label="${meta[1]} sequence ${n}">${n}${used && p.learned.includes(n) ? '<span class="ok">✓</span>' : ""}<small>${noteName(35 + n)}</small></button>`; }).join("");
+    $("tiles").style.setProperty("--pc", css(meta[2]));
+    setHTML($("tiles"), Array.from({ length: 24 }, (_, i) => { const n = i + 1, used = n <= p.count, mapped = used && p.learned.includes(n);
+      return `<button class="tile${used ? "" : " unused"}${mapped ? " mapped" : ""}${used && p.last === n ? " last" : ""}" data-n="${n}" ${used ? "" : "disabled"} aria-label="${meta[1]} sequence ${n}${mapped ? ", mapped in Lightkey" : ""}">${n}${mapped ? '<span class="ok">✓</span><span class="map">MAPPED</span>' : ""}<small>${noteName(35 + n)}</small></button>`; }).join(""));
     $("pickMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === S.pools.mode)));
     $("pairSw").setAttribute("aria-checked", String(S.pools.pair));
   }
@@ -1085,7 +1107,12 @@ body { padding: 0 !important; margin: 0; }
     const row = e.target.closest(".prow"); if (!row) return;
     selPool = row.dataset.id;
     const step = e.target.closest("button[data-d]");
-    if (step) await act("set_pool_count", { pool: selPool, count: S.pools.pools[selPool].count + +step.dataset.d });
+    if (step) {
+      const p = S.pools.pools[selPool], count = Math.max(0, Math.min(24, p.count + +step.dataset.d));
+      if (count === p.count) return;
+      p.count = count; renderSeq();          // instant on screen
+      await act("set_pool_count", { pool: selPool, count });
+    } else renderSeq();
     await poll(true);
   });
   $("tiles").addEventListener("click", async e => {
@@ -1134,18 +1161,27 @@ body { padding: 0 !important; margin: 0; }
   });
 
   // ----- main loop -----
+  const reported = new Set();
+  function reportError(where, e) {
+    const msg = `${where}: ${e && e.stack || e}`;
+    if (reported.has(msg)) return;
+    reported.add(msg); console.error(msg);
+    act("ui_error", { message: msg.slice(0, 2000) });
+  }
   let first = true, polling = false, failures = 0;
   async function poll(once = false) {
     if (polling && !once) return;
     polling = true;
-    try {
-      S = await api("/api/state"); failures = 0;
-      $("lost").hidden = true;
-      if (first) { first = false; $("showAtStart").checked = !S.settings.guide_seen; if (!S.settings.guide_seen) openGuide(0); }
-      renderTitle(); renderRack(); renderDeck(); renderCues(); renderAlert(); renderControls(); renderSeq();
-    } catch (e) {
-      if (++failures > 3) $("lost").hidden = false;
-    } finally { polling = false; }
+    let next;
+    try { next = await api("/api/state"); }
+    catch (e) { if (++failures > 8) $("lost").hidden = false; polling = false; return; }
+    S = next; failures = 0;
+    $("lost").hidden = true;
+    if (first) { first = false; $("showAtStart").checked = !S.settings.guide_seen; if (!S.settings.guide_seen) openGuide(0); }
+    for (const fn of [renderTitle, renderRack, renderDeck, renderCues, renderAlert, renderControls, renderSeq]) {
+      try { fn(); } catch (e) { reportError(fn.name, e); }
+    }
+    polling = false;
   }
   setInterval(() => poll(), 125);
   poll();

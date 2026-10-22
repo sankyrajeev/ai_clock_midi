@@ -75,6 +75,13 @@ class AppServer:
                 return False
 
             def do_GET(self):  # noqa: N802
+                try:
+                    self._get()
+                except Exception:  # noqa: BLE001 - never let one bad request go unexplained
+                    log.exception("Error answering %s", self.path)
+                    self._json(500, {"error": "internal error, see lumiere.log"})
+
+            def _get(self):
                 url = urlparse(self.path)
                 if url.path == "/favicon.ico":
                     return self._send(200, (ASSET_DIRS["assets"] / "brand" / "va-mark-white.png").read_bytes(), "image/png")
@@ -113,5 +120,8 @@ class AppServer:
                     self._json(200, {"ok": True, "result": result})
                 except (ValueError, KeyError, TypeError) as e:
                     self._json(400, {"ok": False, "error": str(e)})
+                except Exception as e:  # noqa: BLE001
+                    log.exception("Action %r failed", self.path)
+                    self._json(500, {"ok": False, "error": f"Something went wrong ({e})"})
 
         return Handler

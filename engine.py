@@ -419,6 +419,10 @@ class LumiereEngine:
         self.manager.switch(project, "Created")
         return {"tip": NAME_TIP}
 
+    def do_ui_error(self, message: str) -> None:
+        """The screen hit a bug; keep it in lumiere.log so it can be reported."""
+        log.error("Screen error: %s", str(message)[:2000])
+
     def do_list_audio_inputs(self) -> list[str]:
         try:
             import sounddevice as sd
@@ -434,7 +438,7 @@ class LumiereEngine:
         now = time.monotonic()
         devices = []
         if vc:
-            for d in sorted(vc.devices.values(), key=lambda d: d.number):
+            for d in sorted(list(vc.devices.values()), key=lambda d: d.number):
                 kind = "mixer" if 33 <= d.number <= 40 else "cdj" if 1 <= d.number <= 6 else "other"
                 devices.append({"number": d.number, "name": d.name, "ip": d.ip, "kind": kind})
         decks = []
