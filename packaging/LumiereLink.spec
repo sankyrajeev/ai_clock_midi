@@ -12,6 +12,7 @@ a = Analysis(
     datas=[
         (str(ROOT / "ui"), "ui"),
         (str(ROOT / "assets" / "brand"), "assets/brand"),
+        (str(ROOT / "VERSION"), "."),
     ],
     hiddenimports=[
         "mido.backends.rtmidi", "rtmidi", "sounddevice", "numpy",

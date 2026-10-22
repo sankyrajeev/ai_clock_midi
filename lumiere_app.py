@@ -14,7 +14,7 @@ import sys
 import webbrowser
 
 from appserver import AppServer
-from engine import LumiereEngine, app_data_dir
+from engine import VERSION, LumiereEngine, app_data_dir
 
 WINDOW_SIZE = (1400, 830)
 
@@ -40,7 +40,7 @@ def main(argv=None) -> int:
     engine.start()
     server = AppServer(engine, port=args.port)
     server.start()
-    logging.info("Lumière Link is running (screen at 127.0.0.1:%d)", server.port)
+    logging.info("Lumière Link %s is running (screen at 127.0.0.1:%d)", VERSION, server.port)
 
     try:
         if args.browser:

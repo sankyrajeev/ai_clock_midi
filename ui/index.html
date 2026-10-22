@@ -73,6 +73,7 @@ button { cursor: pointer; }
 .led.off { background: var(--track); box-shadow: 0 0 0 1px rgba(0,0,0,.6); }
 .tb-right { display: flex; align-items: center; gap: 18px; }
 .tb-right .brand { height: 30px; width: auto; display: block; opacity: .92; }
+.tb-right .ver { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .04em; color: var(--unit); white-space: nowrap; }
 .power { display: inline-flex; align-items: center; gap: 9px; padding: 6px 13px 6px 7px; border-radius: 999px; border: 1px solid var(--track);
   background: linear-gradient(180deg, var(--hover), var(--body)); box-shadow: var(--raise); font-weight: 700; font-size: 12.5px; color: var(--value); }
 .power .ring { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--well); box-shadow: var(--sink); }
@@ -608,6 +609,7 @@ body { padding: 0 !important; margin: 0; }
     <div class="tb-right">
       <button class="help" id="helpBtn" aria-haspopup="dialog"><span class="q">i</span>How it works</button>
       <button class="power" id="power" aria-pressed="true"><span class="ring"></span><span id="powerTxt">Live</span></button>
+      <span class="ver" id="ver" title="Lumière Link version"></span>
       <img class="brand" src="/assets/brand/va-logo-white.png" alt="Vital Acoustica">
     </div>
   </header>
@@ -812,6 +814,8 @@ body { padding: 0 !important; margin: 0; }
     if (!cdjs.length) leds.push(`<span class="led-chip empty"><span class="led off"></span>No CDJs yet</span>`);
     leds.push(`<span class="led-chip${S.ports.ok ? "" : " empty"}"><span class="led${S.ports.ok ? (S.live ? "" : " warn") : " off"}"></span>Lightkey</span>`);
     setHTML($("leds"), leds.join(""));
+    const ver = `v${S.version}`;
+    if ($("ver").textContent !== ver) $("ver").textContent = ver;
     $("power").setAttribute("aria-pressed", String(S.live));
     $("powerTxt").textContent = S.live ? "Live" : "Paused";
     $("app").classList.toggle("paused", !S.live);

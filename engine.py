@@ -31,6 +31,10 @@ from projects import NAME_TIP, ProjectManager, ProjectStore
 log = logging.getLogger("prolink_sync.app")
 
 CLOCK_PORT, CUE_PORT = "Lumiere Clock", "Lumiere Cues"
+try:
+    VERSION = Path(__file__).with_name("VERSION").read_text().strip()
+except OSError:
+    VERSION = "dev"
 SOURCE_OF = {"rekordbox": "rekordbox", "waveform": "waveform"}
 
 
@@ -466,6 +470,7 @@ class LumiereEngine:
         master = next((d for d in decks if d["master"]), None)
         clock_beat = self.beats.get(self.clock.selector._current) if self.clock and self.clock.selector._current else None
         return {
+            "version": VERSION,
             "live": self.live,
             "settings": asdict(self.settings),
             "problem": problem,
