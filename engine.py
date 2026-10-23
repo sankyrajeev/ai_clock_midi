@@ -426,7 +426,7 @@ class LumiereEngine:
 
     def do_set_change_every(self, pool: str, bars: int) -> None:
         if pool not in pl.POOL_CHANNELS or int(bars) not in pl.CHANGE_EVERY:
-            raise ValueError("choose 0, 8, 16 or 32 bars")
+            raise ValueError("choose 0, 4, 8, 16 or 32 bars")
         self._update_config(lambda cfg: cfg.setdefault("change_every", {}).__setitem__(pool, int(bars)))
 
     def do_set_blackout(self, mode: Optional[str] = None, beats: Optional[float] = None) -> None:

@@ -271,7 +271,7 @@ quick way to check it.
 
 Both are in the **Sequences** window, under the tiles, and start **off**.
 
-**New look every 8 / 16 / 32 bars** (for each pool). A long drop doesn't have to
+**New look every 4 / 8 / 16 / 32 bars** (for each pool). A long drop doesn't have to
 stay on one look: with **8 bars**, a 32-bar drop plays four different drop
 sequences, changing exactly on the bar line. They come from the same pool (with
 Shuffle, no repeats). If the section is nearly over, it waits for the next one

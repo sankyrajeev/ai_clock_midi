@@ -164,7 +164,7 @@ Settings are stored in the active project (above); the format is:
 - `--learn` (or `Learn Sequences (MIDI Learn helper).command`) steps through
   every sequence note for MIDI-learning; `--learn drop` does one pool.
 - `--no-pools` turns pools off.
-- `change_every` (bars: 0, 8, 16, 32): within one section, send the next
+- `change_every` (bars: 0, 4, 8, 16, 32): within one section, send the next
   sequence from the same pool every N bars (pool note only, no channel-1 note).
   Skipped when less than N/2 bars of the section remain.
 - `blackout.mode`: `off`, `fixed` (`beats`: 0.5, 1, 2 or 4 before the drop) or

@@ -462,3 +462,12 @@ def test_gap_before_finds_the_silence_before_a_drop():
     assert wf.gap_before(bands(0.5), grid, 17, bpm) == 0.5
     assert wf.gap_before(bands(4.0), grid, 17, bpm) == 4.0
     assert wf.gap_before(bands(0.0), grid, 17, bpm) == 0.0
+
+
+def test_new_look_every_4_bars():
+    rig = loaded_rig()
+    rig.tracker.change_every = lambda cue: 4 if cue == DROP else 0
+    rig.play(1, 288)
+    again = [b for b, e in rig.events if e == ph.AGAIN + DROP]
+    # 16-bar drops at beats 65 and 193: new looks 4, 8 and 12 bars in
+    assert again == [81, 97, 113, 209, 225, 241]

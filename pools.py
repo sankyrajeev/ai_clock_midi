@@ -46,7 +46,7 @@ POOL_CHANNELS = {"drop": 2, "build": 3, "breakdown": 4, "pre_drop": 5,
 LABELS = {"drop": "Drop", "build": "Build", "breakdown": "Breakdown", "pre_drop": "Pre-drop",
           "intro": "Intro", "outro": "Outro", "verse": "Verse", "bridge": "Bridge"}
 MODES = ("shuffle", "random", "order")
-CHANGE_EVERY = (0, 8, 16, 32)            # bars
+CHANGE_EVERY = (0, 4, 8, 16, 32)         # bars
 BLACKOUT_MODES = ("off", "fixed", "music")
 BLACKOUT_BEATS = (0.5, 1.0, 2.0, 4.0)
 
