@@ -53,7 +53,8 @@ DEFAULT_CONFIG = {
              "See README.md, 'Sequence pools'.",
     "mode": "shuffle",
     "pair_builds_with_drops": True,
-    "pools": {name: MAX_SEQUENCES for name in POOL_CHANNELS},
+    # Every pool starts empty: set each to the number of sequences you actually made.
+    "pools": {name: 0 for name in POOL_CHANNELS},
 }
 
 
@@ -153,7 +154,7 @@ def load_config(path: Path) -> dict:
     """Read pools.json, creating it with the defaults the first time."""
     if not path.exists():
         path.write_text(json.dumps(DEFAULT_CONFIG, indent=2) + "\n")
-        log.info("Created %s with 24 sequences per section; edit it to match your Lightkey show", path)
+        log.info("Created %s with every pool at 0; set each to how many sequences you made", path)
         return DEFAULT_CONFIG
     try:
         return json.loads(path.read_text())

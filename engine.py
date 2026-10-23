@@ -377,6 +377,14 @@ class LumiereEngine:
             self.manager.mark_learned(pool, int(seq))
         self._record(pool, "for MIDI Learn" if learn else "by hand", (int(seq), p.count))
 
+    def do_unmap(self, pool: str, seq: int) -> None:
+        """Clear a sequence's MAPPED mark (Lightkey's own mapping is cleared in Lightkey)."""
+        if pool not in pl.POOL_CHANNELS:
+            raise ValueError("no such pool")
+        self.manager.unmark_learned(pool, int(seq))
+        self._record(pool, "unmapped", (int(seq), self.manager.pools.pools[pool].count
+                                        if pool in self.manager.pools.pools else 0))
+
     def _update_config(self, change) -> None:
         with self.manager.lock:
             change(self.manager.project.config)

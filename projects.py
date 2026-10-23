@@ -218,6 +218,14 @@ class ProjectManager:
             self.lightkey_note = "pick project manually"
             log.info("Can't read Lightkey's project (%s); using '%s'", state.detail or state.status, self.project.name)
 
+    def unmark_learned(self, pool: str, sequence: int) -> None:
+        with self.lock:
+            done = self.project.learned.get(pool, [])
+            if sequence in done:
+                done.remove(sequence)
+            if self.persist:
+                self.store.save(self.project)
+
     def mark_learned(self, pool: str, sequence: int) -> None:
         with self.lock:
             done = self.project.learned.setdefault(pool, [])

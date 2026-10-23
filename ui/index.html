@@ -325,6 +325,10 @@ select:disabled { color: var(--tick); }
 .tile.mapped { color: var(--ivory); background: linear-gradient(180deg, color-mix(in srgb, var(--pc) 34%, #2B2B29) 0%, color-mix(in srgb, var(--pc) 18%, var(--body)) 60%, #20201F 100%);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pc) 70%, transparent), 0 3px 0 #141413, 0 0 12px color-mix(in srgb, var(--pc) 30%, transparent); }
 .tile.mapped .ok { background: var(--pc); color: #141413; box-shadow: none; font-weight: 700; }
+.tile .unmap { display: none; position: absolute; left: 6px; top: 5px; width: 18px; height: 18px; border-radius: 50%; place-items: center; font-size: 10px;
+  background: rgba(16,16,16,.75); color: var(--value); box-shadow: inset 0 0 0 1px var(--track); }
+.tile .unmap:hover { background: var(--ember, #E0604A); color: #141413; }
+.learning-on .tile.mapped .unmap { display: grid; }
 .tile .map { position: absolute; right: 8px; bottom: 5px; font-family: var(--f-mono); font-size: 8.5px; letter-spacing: .08em; color: color-mix(in srgb, var(--pc) 80%, #fff); }
 .pick-opts { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
 .pick-opts .segbtn { width: 330px; }
@@ -1107,7 +1111,7 @@ body { padding: 0 !important; margin: 0; }
     $("pdSub").textContent = p.count ? `${p.count} sequence${p.count === 1 ? "" : "s"} · MIDI channel ${p.channel} · notes ${noteName(36)}–${noteName(35 + p.count)}` : "Switched off. Press + to add sequences.";
     $("tiles").style.setProperty("--pc", css(meta[2]));
     setHTML($("tiles"), Array.from({ length: 24 }, (_, i) => { const n = i + 1, used = n <= p.count, mapped = used && p.learned.includes(n);
-      return `<button class="tile${used ? "" : " unused"}${mapped ? " mapped" : ""}${used && p.last === n ? " last" : ""}" data-n="${n}" ${used ? "" : "disabled"} aria-label="${meta[1]} sequence ${n}${mapped ? ", mapped in Lightkey" : ""}">${n}${mapped ? '<span class="ok">✓</span><span class="map">MAPPED</span>' : ""}<small>${noteName(35 + n)}</small></button>`; }).join(""));
+      return `<button class="tile${used ? "" : " unused"}${mapped ? " mapped" : ""}${used && p.last === n ? " last" : ""}" data-n="${n}" ${used ? "" : "disabled"} aria-label="${meta[1]} sequence ${n}${mapped ? ", mapped in Lightkey" : ""}">${n}${mapped ? '<span class="unmap" role="button" title="Unmap this sequence" aria-label="Unmap">✕</span><span class="ok">✓</span><span class="map">MAPPED</span>' : ""}<small>${noteName(35 + n)}</small></button>`; }).join(""));
     $("pickMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === S.pools.mode)));
     $("pairSw").setAttribute("aria-checked", String(S.pools.pair));
   }
@@ -1125,6 +1129,11 @@ body { padding: 0 !important; margin: 0; }
   });
   $("tiles").addEventListener("click", async e => {
     const t = e.target.closest(".tile"); if (!t || t.disabled) return;
+    if (e.target.closest(".unmap")) {
+      await act("unmap", { pool: selPool, seq: +t.dataset.n });
+      toast(`Unmapped ${POOL_META.find(m => m[0] === selPool)[1]} ${t.dataset.n}. Also clear it in Lightkey: the cue's External Control.`);
+      await poll(true); return;
+    }
     t.style.setProperty("--c", css(POOL_META.find(m => m[0] === selPool)[2])); t.classList.add("flash");
     await act("send_sequence", { pool: selPool, seq: +t.dataset.n, learn: learnOn });
     await poll(true);
@@ -1132,7 +1141,7 @@ body { padding: 0 !important; margin: 0; }
   $("learnSw").addEventListener("click", () => {
     learnOn = !learnOn; $("learnSw").setAttribute("aria-checked", String(learnOn));
     $("learnBar").classList.toggle("on", learnOn); $("tiles").classList.toggle("learning-on", learnOn);
-    $("learnTxt").innerHTML = learnOn ? "<b>Learn is on.</b> In Lightkey, start MIDI Learn on a sequence (its External Control), then click its tile here. It gets a ✓ once sent." :
+    $("learnTxt").innerHTML = learnOn ? "<b>Learn is on.</b> In Lightkey, start MIDI Learn on a sequence (its External Control), then click its tile here. It gets a ✓ once sent. Click ✕ on a tile to unmap it." :
       "To connect these to Lightkey, switch on <b>Learn</b>, put a sequence into MIDI Learn in Lightkey, then click the matching tile here.";
   });
   $("pickMode").addEventListener("click", async e => { const b = e.target.closest("button"); if (!b) return; await act("set_pick_mode", { mode: b.dataset.m }); poll(true); });

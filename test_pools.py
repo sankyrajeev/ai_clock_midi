@@ -75,7 +75,7 @@ def test_config_limits_and_per_pool_settings():
 def test_config_file_is_created_with_defaults(tmp_path):
     path = tmp_path / "pools.json"
     cfg = pl.load_config(path)
-    assert path.exists() and json.loads(path.read_text())["pools"]["drop"] == 24
+    assert path.exists() and json.loads(path.read_text())["pools"]["drop"] == 0  # pools start empty
     assert cfg["mode"] == "shuffle" and cfg["pair_builds_with_drops"] is True
     path.write_text("{ not json")
     assert pl.load_config(path)["mode"] == "shuffle"  # falls back instead of crashing
