@@ -52,7 +52,7 @@ DEFAULT_CONFIG = {
              "one. mode: shuffle | random | order. Set a count to 0 to switch that pool off. "
              "See README.md, 'Sequence pools'.",
     "mode": "shuffle",
-    "pair_builds_with_drops": True,
+    "pair_builds_with_drops": False,
     # Every pool starts empty: set each to the number of sequences you actually made.
     "pools": {name: 0 for name in POOL_CHANNELS},
 }
@@ -114,7 +114,7 @@ class SequencePools:
         if default_mode not in MODES:
             log.warning("Unknown pool mode %r, using shuffle", default_mode)
             default_mode = "shuffle"
-        self.pair = bool(cfg.get("pair_builds_with_drops", True))
+        self.pair = bool(cfg.get("pair_builds_with_drops", False))
         self.pools: dict[str, Pool] = {}
         for name, value in (cfg.get("pools") or {}).items():
             if name not in POOL_CHANNELS:

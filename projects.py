@@ -48,7 +48,7 @@ class Project:
             "name": self.name,
             "lightkey": {"project_name": self.lightkey_name, "project_path": self.lightkey_path},
             "mode": self.config.get("mode", "shuffle"),
-            "pair_builds_with_drops": self.config.get("pair_builds_with_drops", True),
+            "pair_builds_with_drops": self.config.get("pair_builds_with_drops", False),
             "pools": self.config.get("pools", {}),
             "learned": {k: sorted(set(v)) for k, v in self.learned.items() if v},
         }
@@ -57,7 +57,7 @@ class Project:
     def from_json(cls, data: dict, fallback_name: str) -> "Project":
         lk = data.get("lightkey") or {}
         config = {"mode": data.get("mode", "shuffle"),
-                  "pair_builds_with_drops": data.get("pair_builds_with_drops", True),
+                  "pair_builds_with_drops": data.get("pair_builds_with_drops", False),
                   "pools": data.get("pools", copy.deepcopy(pl.DEFAULT_CONFIG["pools"]))}
         learned = {k: [int(n) for n in v] for k, v in (data.get("learned") or {}).items()}
         return cls(data.get("name") or fallback_name, config, learned,
@@ -199,10 +199,10 @@ class ProjectManager:
             self.lightkey_note = ""
             match = self.store.find_for(state.name, state.path)
             if match is None:
-                match = self.store.create(state.name, base=self.project,
-                                          lightkey_name=state.name, lightkey_path=state.path)
-                log.info("Lightkey opened '%s'. Created a Lumière project with the same name, starting "
-                         "from '%s' (saved in %s)", state.name, self.project.name, self.store.dir)
+                # Starts empty: another show's counts and ✓ marks mean nothing in this one.
+                match = self.store.create(state.name, lightkey_name=state.name, lightkey_path=state.path)
+                log.info("Lightkey opened '%s'. Created an empty Lumière project with the same name "
+                         "(saved in %s)", state.name, self.store.dir)
             elif (match.lightkey_path != state.path and state.path) or match.lightkey_name != state.name:
                 match.lightkey_name, match.lightkey_path = state.name, state.path or match.lightkey_path
                 self.store.save(match)

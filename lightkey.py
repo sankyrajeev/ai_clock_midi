@@ -24,22 +24,42 @@ log = logging.getLogger("prolink_sync.lightkey")
 OPEN, NOT_RUNNING, NO_WINDOW, PERMISSION, UNSUPPORTED, ERROR = (
     "open", "not_running", "no_window", "permission", "unsupported", "error")
 
-# Prefer a window that has a document (palettes and inspectors have none).
+# Lists every Lightkey window as "title<TAB>document<TAB>subrole", one per line.
+# Python then picks the project window (see pick_window): palettes, External
+# Control, Preferences and dialogs must never be mistaken for a project.
 SCRIPT = '''
 tell application "System Events"
     if not (exists process "Lightkey") then return "NOT_RUNNING"
     tell process "Lightkey"
         if (count of windows) is 0 then return "NO_WINDOW"
+        set out to "WINDOWS" & linefeed
         repeat with w in windows
+            set n to ""
+            set d to ""
+            set r to ""
+            try
+                set n to name of w
+                if n is missing value then set n to ""
+            end try
             try
                 set d to value of attribute "AXDocument" of w
-                if d is not missing value and d is not "" then return (name of w) & linefeed & d
+                if d is missing value then set d to ""
             end try
+            try
+                set r to value of attribute "AXSubrole" of w
+                if r is missing value then set r to ""
+            end try
+            set out to out & n & tab & d & tab & r & linefeed
         end repeat
-        return (name of window 1) & linefeed & ""
+        return out
     end tell
 end tell
 '''
+
+# Lightkey windows that are never a project, whatever macOS says about them.
+NOT_PROJECTS = re.compile(
+    r"^(external control|midi|preferences|settings|fixture|library|welcome|about|"
+    r"open|save|export|import|print|software update|lightkey$|untitled$)", re.I)
 
 PERMISSION_ADVICE = (
     "macOS hasn't allowed reading which Lightkey project is open. Open System Settings > "
@@ -66,12 +86,31 @@ def clean_name(title: str) -> str:
     return name.strip()
 
 
+def pick_window(windows: list[tuple[str, str, str]]) -> Optional[tuple[str, str]]:
+    """The project window among (title, document, subrole): one with a project
+    file first; otherwise a normal window whose title isn't a known panel."""
+    for title, doc, _ in windows:
+        if doc.strip() and doc.strip() != "missing value":
+            return title, doc
+    for title, _, subrole in windows:
+        if subrole in ("", "AXStandardWindow") and title.strip() and not NOT_PROJECTS.match(title.strip()):
+            return title, ""
+    return None
+
+
 def parse(stdout: str) -> LightkeyState:
     out = stdout.strip("\n")
     if out == "NOT_RUNNING":
         return LightkeyState(NOT_RUNNING)
     if out == "NO_WINDOW":
         return LightkeyState(NO_WINDOW)
+    if out.startswith("WINDOWS"):
+        rows = [(line.split("\t") + ["", "", ""])[:3] for line in out.split("\n")[1:] if line.strip()]
+        chosen = pick_window([tuple(r) for r in rows])
+        if chosen is None:
+            return LightkeyState(NO_WINDOW, detail="no project window (only panels or dialogs)")
+        title, doc = chosen
+        out = f"{title}\n{doc}"
     title, _, doc = out.partition("\n")
     path = ""
     doc = doc.strip()
@@ -105,7 +144,12 @@ def read_open_project(run: Callable[[str], subprocess.CompletedProcess] = _osasc
 
 
 class LightkeyWatcher:
-    """Polls Lightkey every few seconds and reports when the open project changes."""
+    """Polls Lightkey every few seconds and reports when the open project changes.
+
+    A change to another project is only reported once it has been seen on two
+    polls in a row, and while a real project file is known, a window that only
+    has a title can't replace it, so passing moments (switching windows, a
+    dialog in front) never switch the Lumière project."""
 
     def __init__(self, on_change: Callable[[LightkeyState], None], interval: float = 3.0,
                  read: Callable[[], LightkeyState] = read_open_project):
@@ -114,6 +158,8 @@ class LightkeyWatcher:
         self.read = read
         self.alive = True
         self.last: Optional[LightkeyState] = None
+        self._pending: Optional[LightkeyState] = None
+        self._known_path: Optional[LightkeyState] = None
         self._stop = threading.Event()
 
     def start(self) -> None:
@@ -125,9 +171,22 @@ class LightkeyWatcher:
 
     def poll_once(self) -> LightkeyState:
         state = self.read()
-        if self.last is None or state.key != self.last.key:
-            self.last = state
-            self.on_change(state)
+        if state.status == OPEN and not state.path and self._known_path:
+            state = self._known_path  # a title-only window can't override a real project file
+        if self.last is not None and state.key == self.last.key:
+            self._pending = None
+            return state
+        if self.last is not None and state.status in (OPEN, NO_WINDOW, ERROR):
+            if self._pending is None or self._pending.key != state.key:
+                self._pending = state  # wait for the next poll to confirm
+                return state
+        self._pending = None
+        if state.status == OPEN and state.path:
+            self._known_path = state
+        elif state.status == NOT_RUNNING:
+            self._known_path = None
+        self.last = state
+        self.on_change(state)
         return state
 
     def _run(self) -> None:

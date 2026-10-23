@@ -76,7 +76,7 @@ def test_config_file_is_created_with_defaults(tmp_path):
     path = tmp_path / "pools.json"
     cfg = pl.load_config(path)
     assert path.exists() and json.loads(path.read_text())["pools"]["drop"] == 0  # pools start empty
-    assert cfg["mode"] == "shuffle" and cfg["pair_builds_with_drops"] is True
+    assert cfg["mode"] == "shuffle" and cfg["pair_builds_with_drops"] is False  # pairing starts off
     path.write_text("{ not json")
     assert pl.load_config(path)["mode"] == "shuffle"  # falls back instead of crashing
 

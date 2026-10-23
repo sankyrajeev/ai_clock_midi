@@ -493,7 +493,7 @@ class LumiereEngine:
             "project": {"name": project.name, "names": self.store.names(),
                         "lightkey_name": project.lightkey_name},
             "pools": {"mode": project.config.get("mode", "shuffle"),
-                      "pair": bool(project.config.get("pair_builds_with_drops", True)),
+                      "pair": bool(project.config.get("pair_builds_with_drops", False)),
                       "pools": pools_state},
             "log": log_entries,
             "flashes": flashes,

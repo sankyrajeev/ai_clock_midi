@@ -149,7 +149,7 @@ Settings are stored in the active project (above); the format is:
 ```json
 {
   "mode": "shuffle",
-  "pair_builds_with_drops": true,
+  "pair_builds_with_drops": false,
   "pools": { "drop": 24, "build": 24, "breakdown": 12, "intro": {"count": 4, "mode": "order"}, ... }
 }
 ```

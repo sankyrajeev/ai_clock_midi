@@ -61,8 +61,10 @@ def test_lightkey_project_creates_a_matching_lumiere_project(tmp_path):
     m = manager(tmp_path, switches)
     m.on_lightkey(LightkeyState(OPEN, "Club Night", "/Shows/Club Night.lightkey"))
     assert m.project.name == "Club Night"
-    assert m.project.config["pools"] == {"drop": 6, "build": 6}  # starts from the current settings
-    assert m.project.learned == {"drop": [1, 2]}
+    # starts empty: another show's counts and ✓ marks don't belong to this one
+    assert set(m.project.config["pools"].values()) == {0}
+    assert m.project.learned == {}
+    assert m.project.config["pair_builds_with_drops"] is False
     saved = m.store.load("Club Night")
     assert saved and saved.lightkey_path == "/Shows/Club Night.lightkey"
     assert switches and switches[-1][0] == "Club Night"

@@ -164,9 +164,9 @@ Lumière Link picks one each time:
 
 - **Shuffle** (the default): random, but it plays all 24 before repeating any,
   and never plays the same one twice in a row.
-- **Builds and drops are paired**: if build sequence 7 played, the drop that
-  follows uses drop sequence 7. Design build 7 and drop 7 to belong together,
-  and they'll always arrive together.
+- **Pair builds with drops** (off unless you switch it on): if build sequence 7
+  played, the drop that follows uses drop sequence 7. Design build 7 and drop 7
+  to belong together, and they'll always arrive together.
 
 There are 8 pools, each with up to 24 sequences:
 
@@ -210,9 +210,11 @@ open and uses the Lumière project with the **same name**:
 
 - Open **"Club Night"** in Lightkey → Lumière Link uses its **"Club Night"** project.
 - Lightkey project with no Lumière project yet → Lumière Link **creates one with
-  the same name**, starting from the settings you were just using.
+  the same name**. It starts empty (every pool at 0), ready for that show.
 - Switch Lightkey to another project mid-show → the next cue uses the new
   project's sequences.
+- Lightkey's other windows (External Control, Preferences, Save…) are ignored,
+  so mapping a cue or moving between windows never changes your project.
 
 A small **LIGHTKEY** tag next to the project name means it's following.
 
@@ -258,7 +260,9 @@ saves the ✓ marks by itself. Restarting the Mac changes nothing.
 
 > **Tip:** for a new show, **duplicate an already-mapped Lightkey project**
 > instead of starting from scratch. Lumière Link always uses the same notes
-> (Drop sequence 1 is always channel 2, note C1), so the copy works straight away.
+> (Drop sequence 1 is always channel 2, note C1), so the copy's mappings work
+> straight away. In the new Lumière project, set the counts again and tick the
+> tiles (Learn on, click each tile once).
 
 With Learn switched off, clicking a tile just plays that sequence, which is a
 quick way to check it.
