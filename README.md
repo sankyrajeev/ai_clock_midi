@@ -267,6 +267,29 @@ saves the ✓ marks by itself. Restarting the Mac changes nothing.
 With Learn switched off, clicking a tile just plays that sequence, which is a
 quick way to check it.
 
+### 6.6 New looks in long sections, and a blackout before the drop
+
+Both are in the **Sequences** window, under the tiles, and start **off**.
+
+**New look every 8 / 16 / 32 bars** (for each pool). A long drop doesn't have to
+stay on one look: with **8 bars**, a 32-bar drop plays four different drop
+sequences, changing exactly on the bar line. They come from the same pool (with
+Shuffle, no repeats). If the section is nearly over, it waits for the next one
+instead of changing at the last moment.
+
+**Blackout before the drop** (on the Drop pool). Many tracks go silent for a
+moment right before the drop. Lumière Link can black the lights out there, then
+fire the drop sequence on the first beat of the drop:
+
+- **Fixed length**: always ½ beat, 1 beat, 2 beats or 1 bar before the drop.
+- **Follow the music**: it finds the silence in the track's waveform and blacks
+  out exactly when the music stops. A track with no gap gets no blackout.
+
+In Lightkey, make one **Blackout** cue (everything off) and map it once: with
+**Learn** on, click the **Blackout cue** button next to these options. It uses
+its own message (channel 10, note C3), so it never clashes with a sequence.
+The **Blackout** pad under Lighting cues fires it by hand.
+
 ---
 
 ## 7. Connect the real gear
@@ -410,6 +433,8 @@ Yes: **Demo mode** (part 4).
 | Outro | 7 | 36 | 59 |
 | Verse | 8 | 36 | 59 |
 | Bridge | 9 | 36 | 59 |
+
+**Lumiere Cues, blackout before the drop:** channel 10, note 60 (C3).
 
 **Lumiere Cues, channel 1** (sent on every section, whether or not pools are on):
 

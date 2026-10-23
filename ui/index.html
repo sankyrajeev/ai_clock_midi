@@ -301,7 +301,24 @@ select:disabled { color: var(--tick); }
 .stepper button { width: 26px; height: 26px; border: 0; border-radius: 7px; background: linear-gradient(180deg, var(--hover), var(--body)); color: var(--value); font-size: 15px; line-height: 1; box-shadow: inset 0 1px 0 rgba(240,237,229,.06); }
 .stepper button:disabled { opacity: .35; cursor: default; }
 .stepper output { min-width: 28px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ivory); }
-.pool-detail { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 14px; min-width: 0; min-height: 0; }
+.pool-detail { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 12px; min-width: 0; min-height: 0; }
+.look-opts { display: grid; gap: 8px; }
+.look-opts .opt { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.look-opts .opt[hidden] { display: none; }
+#boBeats { margin-left: 184px; }  /* lines up under the blackout choices */
+.look-opts .opt > .t { min-width: 172px; color: var(--value); font-size: 13px; font-weight: 600; }
+.look-opts .opt > .t small { display: block; color: var(--unit); font-weight: 400; font-size: 11px; }
+.look-opts .segbtn { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: auto; }
+.look-opts .segbtn button { padding: 6px 11px; }
+.look-opts .segbtn button:disabled { opacity: .35; cursor: default; }
+.botile { margin-left: auto; position: relative; border: 0; border-radius: 9px; padding: 7px 12px 7px 12px; color: var(--ivory); font-weight: 600; font-size: 12px;
+  background: linear-gradient(180deg, #2B2B29, var(--body)); box-shadow: inset 0 1px 0 rgba(240,237,229,.07), 0 2px 0 #141413; display: inline-flex; gap: 8px; align-items: center; }
+.botile small { font-family: var(--f-mono); font-size: 9.5px; color: var(--unit); }
+.botile.mapped { box-shadow: inset 0 0 0 1px var(--brass), 0 2px 0 #141413; }
+.botile .ok { color: var(--brass-glow); }
+.botile .unmap { display: none; width: 16px; height: 16px; border-radius: 50%; place-items: center; font-size: 9px; background: rgba(16,16,16,.75); box-shadow: inset 0 0 0 1px var(--track); }
+.learning-on-bo .botile.mapped .unmap { display: grid; }
+.learning-on-bo .botile { box-shadow: inset 0 0 0 1.5px var(--violet), 0 2px 0 #141413; }
 .pd-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .pd-head h3 { margin: 0; font-size: 22px; font-weight: 500; color: var(--ivory); }
 .pd-head p { margin: 3px 0 0; color: var(--unit); font-size: 12.5px; }
@@ -579,6 +596,22 @@ body { padding: 0 !important; margin: 0; }
             <button class="switch" role="switch" aria-checked="false" id="learnSw" style="width:auto"><span class="txt"><span class="t">Learn</span></span><span class="k"></span></button>
           </div>
           <div class="well tiles" id="tiles"></div>
+          <div class="look-opts">
+            <div class="opt"><span class="t">New look every<small>within one long section</small></span>
+              <div class="well segbtn" role="group" aria-label="New look every" id="everySeg">
+                <button data-b="0">Off</button><button data-b="8">8 bars</button><button data-b="16">16 bars</button><button data-b="32">32 bars</button>
+              </div>
+            </div>
+            <div class="opt" id="boRow"><span class="t">Blackout before the drop<small>map one Blackout cue in Lightkey</small></span>
+              <div class="well segbtn" role="group" aria-label="Blackout" id="boMode">
+                <button data-m="off">Off</button><button data-m="fixed">Fixed length</button><button data-m="music">Follow the music</button>
+              </div>
+              <div class="well segbtn" role="group" aria-label="Blackout length" id="boBeats">
+                <button data-b="0.5">½ beat</button><button data-b="1">1 beat</button><button data-b="2">2 beats</button><button data-b="4">1 bar</button>
+              </div>
+              <button class="botile" id="boTile" title="Blackout cue: channel 10, note C3"></button>
+            </div>
+          </div>
           <div class="pick-opts">
             <div class="well segbtn" role="group" aria-label="How to pick" id="pickMode">
               <button aria-pressed="true" data-m="shuffle">Shuffle</button><button aria-pressed="false" data-m="random">Random</button><button aria-pressed="false" data-m="order">In order</button>
@@ -774,6 +807,7 @@ body { padding: 0 !important; margin: 0; }
     { id: "verse", name: "Verse", note: 43, c: "--b-lowmid" }, { id: "bridge", name: "Bridge", note: 44, c: "--b-air" },
     { id: "phrase", name: "8 bars", note: 39, c: "--label" }, { id: "bar", name: "Bar", note: 40, c: "--unit" },
     { id: "new_track", name: "New track", note: 46, c: "--ivory" },
+    { id: "blackout", name: "Blackout", note: 60, c: "--unit" },
   ];
   const byId = Object.fromEntries(CUES.map(c => [c.id, c]));
   const POOL_META = [["drop", "Drop", "--b-sub"], ["build", "Build", "--b-low"], ["breakdown", "Breakdown", "--b-high"],
@@ -1113,6 +1147,13 @@ body { padding: 0 !important; margin: 0; }
     setHTML($("tiles"), Array.from({ length: 24 }, (_, i) => { const n = i + 1, used = n <= p.count, mapped = used && p.learned.includes(n);
       return `<button class="tile${used ? "" : " unused"}${mapped ? " mapped" : ""}${used && p.last === n ? " last" : ""}" data-n="${n}" ${used ? "" : "disabled"} aria-label="${meta[1]} sequence ${n}${mapped ? ", mapped in Lightkey" : ""}">${n}${mapped ? '<span class="unmap" role="button" title="Unmap this sequence" aria-label="Unmap">✕</span><span class="ok">✓</span><span class="map">MAPPED</span>' : ""}<small>${noteName(35 + n)}</small></button>`; }).join(""));
     $("pickMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === S.pools.mode)));
+    $("everySeg").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(+x.dataset.b === (p.every || 0))));
+    const bo = S.pools.blackout;
+    $("boRow").hidden = selPool !== "drop";
+    $("boMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.m === bo.mode)));
+    $("boBeats").querySelectorAll("button").forEach(x => { x.setAttribute("aria-pressed", String(+x.dataset.b === bo.beats && bo.mode === "fixed")); x.disabled = bo.mode !== "fixed"; });
+    $("boTile").classList.toggle("mapped", bo.learned);
+    setHTML($("boTile"), `${bo.learned ? '<span class="unmap" title="Unmap">✕</span>' : ""}Blackout cue <small>CH ${bo.channel} · ${noteName(bo.note)}</small>${bo.learned ? '<span class="ok">✓</span>' : ""}`);
     $("pairSw").setAttribute("aria-checked", String(S.pools.pair));
   }
   $("poolList").addEventListener("click", async e => {
@@ -1140,9 +1181,23 @@ body { padding: 0 !important; margin: 0; }
   });
   $("learnSw").addEventListener("click", () => {
     learnOn = !learnOn; $("learnSw").setAttribute("aria-checked", String(learnOn));
-    $("learnBar").classList.toggle("on", learnOn); $("tiles").classList.toggle("learning-on", learnOn);
+    $("learnBar").classList.toggle("on", learnOn); $("tiles").classList.toggle("learning-on", learnOn); $("boRow").classList.toggle("learning-on-bo", learnOn);
     $("learnTxt").innerHTML = learnOn ? "<b>Learn is on.</b> In Lightkey, start MIDI Learn on a sequence (its External Control), then click its tile here. It gets a ✓ once sent. Click ✕ on a tile to unmap it." :
       "To connect these to Lightkey, switch on <b>Learn</b>, put a sequence into MIDI Learn in Lightkey, then click the matching tile here.";
+  });
+  $("everySeg").addEventListener("click", async e => { const b = e.target.closest("button"); if (!b) return;
+    S.pools.pools[selPool].every = +b.dataset.b; renderSeq();
+    await act("set_change_every", { pool: selPool, bars: +b.dataset.b }); poll(true); });
+  $("boMode").addEventListener("click", async e => { const b = e.target.closest("button"); if (!b) return;
+    S.pools.blackout.mode = b.dataset.m; renderSeq();
+    await act("set_blackout", { mode: b.dataset.m }); poll(true); });
+  $("boBeats").addEventListener("click", async e => { const b = e.target.closest("button"); if (!b || b.disabled) return;
+    S.pools.blackout.beats = +b.dataset.b; renderSeq();
+    await act("set_blackout", { beats: +b.dataset.b }); poll(true); });
+  $("boTile").addEventListener("click", async e => {
+    if (e.target.closest(".unmap")) { await act("unmap", { pool: "blackout", seq: 1 }); toast("Unmapped the Blackout cue. Also clear it in Lightkey."); }
+    else await act("send_blackout", { learn: learnOn });
+    poll(true);
   });
   $("pickMode").addEventListener("click", async e => { const b = e.target.closest("button"); if (!b) return; await act("set_pick_mode", { mode: b.dataset.m }); poll(true); });
   $("pairSw").addEventListener("click", async () => { await act("set_pairing", { on: !S.pools.pair }); poll(true); });

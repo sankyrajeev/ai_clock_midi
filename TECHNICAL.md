@@ -150,7 +150,9 @@ Settings are stored in the active project (above); the format is:
 {
   "mode": "shuffle",
   "pair_builds_with_drops": false,
-  "pools": { "drop": 24, "build": 24, "breakdown": 12, "intro": {"count": 4, "mode": "order"}, ... }
+  "pools": { "drop": 24, "build": 24, "breakdown": 12, "intro": {"count": 4, "mode": "order"}, ... },
+  "change_every": { "drop": 8, "build": 0, ... },
+  "blackout": { "mode": "music", "beats": 1.0 }
 }
 ```
 
@@ -162,6 +164,13 @@ Settings are stored in the active project (above); the format is:
 - `--learn` (or `Learn Sequences (MIDI Learn helper).command`) steps through
   every sequence note for MIDI-learning; `--learn drop` does one pool.
 - `--no-pools` turns pools off.
+- `change_every` (bars: 0, 8, 16, 32): within one section, send the next
+  sequence from the same pool every N bars (pool note only, no channel-1 note).
+  Skipped when less than N/2 bars of the section remain.
+- `blackout.mode`: `off`, `fixed` (`beats`: 0.5, 1, 2 or 4 before the drop) or
+  `music` (`waveform.gap_before`: half beats before the drop whose level is
+  under 30 % of the 8 beats before them, up to 2 bars). Sent as channel 10,
+  note 60.
 
 ## Phrase cues over the network (recommended)
 

@@ -50,6 +50,8 @@ class Project:
             "mode": self.config.get("mode", "shuffle"),
             "pair_builds_with_drops": self.config.get("pair_builds_with_drops", False),
             "pools": self.config.get("pools", {}),
+            "change_every": self.config.get("change_every", {}),
+            "blackout": self.config.get("blackout", {"mode": "off", "beats": 1.0}),
             "learned": {k: sorted(set(v)) for k, v in self.learned.items() if v},
         }
 
@@ -58,7 +60,9 @@ class Project:
         lk = data.get("lightkey") or {}
         config = {"mode": data.get("mode", "shuffle"),
                   "pair_builds_with_drops": data.get("pair_builds_with_drops", False),
-                  "pools": data.get("pools", copy.deepcopy(pl.DEFAULT_CONFIG["pools"]))}
+                  "pools": data.get("pools", copy.deepcopy(pl.DEFAULT_CONFIG["pools"])),
+                  "change_every": data.get("change_every", {}),
+                  "blackout": data.get("blackout", {"mode": "off", "beats": 1.0})}
         learned = {k: [int(n) for n in v] for k, v in (data.get("learned") or {}).items()}
         return cls(data.get("name") or fallback_name, config, learned,
                    lk.get("project_name", ""), lk.get("project_path", ""))

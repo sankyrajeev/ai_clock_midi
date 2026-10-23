@@ -247,3 +247,34 @@ def _build_start(high: np.ndarray) -> Optional[int]:
         return None
     near = round(best / 4) * 4  # builds start on phrase lines
     return near if abs(near - best) <= 1 and near < n else best
+
+
+def gap_before(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
+               max_beats: float = 8.0, quiet: float = 0.3) -> float:
+    """How many beats of near-silence come right before `drop_beat` (in half beats,
+    0 when there's no gap). Compares each half beat before the drop with the
+    level of the 8 beats before that stretch."""
+    level = bands.low.astype(float) + bands.mid + bands.high
+    if not len(level) or drop_beat < 3:
+        return 0.0
+
+    def at(beat: float) -> float:  # seconds at a (fractional) 1-based beat
+        i = int(beat) - 1
+        if grid and 0 <= i < len(grid) - 1:
+            a, b = grid[i].time_ms, grid[i + 1].time_ms
+            return (a + (beat - int(beat)) * (b - a)) / 1000
+        return (beat - 1) * 60 / (bpm or 120)
+
+    def mean(b0: float, b1: float) -> float:
+        lo, hi = int(at(b0) * ENTRIES_PER_SECOND), int(at(b1) * ENTRIES_PER_SECOND)
+        lo, hi = max(0, lo), min(len(level), max(hi, lo + 1))
+        return float(level[lo:hi].mean()) if hi > lo else 0.0
+
+    gap = 0.0
+    while gap < max_beats and drop_beat - gap - 0.5 >= 1:
+        start = drop_beat - gap - 0.5
+        ref = mean(max(1, start - 8), start)
+        if ref <= 0 or mean(start, start + 0.5) > quiet * ref:
+            break
+        gap += 0.5
+    return gap

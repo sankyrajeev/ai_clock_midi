@@ -410,3 +410,55 @@ def test_midi_sends_never_overlap_and_stop_after_close(monkeypatch):
     time.sleep(0.15)
     assert state["overlaps"] == 0
     assert state["after_close"] == 0
+
+
+def test_new_look_every_8_bars_in_long_sections():
+    rig = loaded_rig()
+    rig.tracker.change_every = lambda cue: 8 if cue == DROP else 0
+    rig.play(1, 288)
+    again = [(b, e) for b, e in rig.events if e.startswith(ph.AGAIN)]
+    # each drop is 16 bars: first look on its first beat, the next 8 bars in
+    assert again == [(97, ph.AGAIN + DROP), (225, ph.AGAIN + DROP)]
+
+
+def test_no_new_look_when_the_section_is_nearly_over():
+    rig = loaded_rig()
+    rig.tracker.change_every = lambda cue: 32 if cue == DROP else 0  # 32 bars: drop is only 16
+    rig.play(1, 288)
+    assert not [e for _, e in rig.events if e.startswith(ph.AGAIN)]
+
+
+def test_blackout_lands_the_set_number_of_beats_before_each_drop():
+    for beats, expect in ((1.0, [64, 192]), (2.0, [63, 191]), (4.0, [61, 189])):
+        rig = loaded_rig()
+        rig.tracker.blackout_beats = lambda key, drop, n=beats: n
+        rig.play(1, 288)
+        assert [b for b, e in rig.events if e == ph.BLACKOUT] == expect, beats
+        assert (65, DROP) in rig.events  # the drop cue still fires on the drop
+
+
+def test_half_beat_blackout_waits_half_a_beat():
+    rig = loaded_rig()
+    rig.tracker.blackout_beats = lambda key, drop: 0.5
+    rig.play(1, 63)  # now on beat 64; the drop is beat 65
+    assert ph.BLACKOUT not in [e for _, e in rig.events]
+    time.sleep(0.4)  # half a beat at 128 BPM is 0.23 s
+    assert [b for b, e in rig.events if e == ph.BLACKOUT] == [64]
+
+
+def test_gap_before_finds_the_silence_before_a_drop():
+    import numpy as np
+
+    import waveform as wf
+
+    eps, bpm = wf.ENTRIES_PER_SECOND, 120.0     # 0.5 s per beat
+    def bands(gap_beats):
+        level = np.full(int(40 * eps), 120, dtype=np.uint8)
+        end = int(8.0 * eps)                    # the drop on beat 17 is at 8.0 s
+        level[end - int(gap_beats * 0.5 * eps):end] = 3
+        return wf.Bands(level, level, level, "test")
+    grid = wf.parse_beat_grid(wf.build_beat_grid(bpm, 80))
+    assert wf.gap_before(bands(1.0), grid, 17, bpm) == 1.0
+    assert wf.gap_before(bands(0.5), grid, 17, bpm) == 0.5
+    assert wf.gap_before(bands(4.0), grid, 17, bpm) == 4.0
+    assert wf.gap_before(bands(0.0), grid, 17, bpm) == 0.0

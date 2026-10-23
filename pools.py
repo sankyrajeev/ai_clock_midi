@@ -46,6 +46,9 @@ POOL_CHANNELS = {"drop": 2, "build": 3, "breakdown": 4, "pre_drop": 5,
 LABELS = {"drop": "Drop", "build": "Build", "breakdown": "Breakdown", "pre_drop": "Pre-drop",
           "intro": "Intro", "outro": "Outro", "verse": "Verse", "bridge": "Bridge"}
 MODES = ("shuffle", "random", "order")
+CHANGE_EVERY = (0, 8, 16, 32)            # bars
+BLACKOUT_MODES = ("off", "fixed", "music")
+BLACKOUT_BEATS = (0.5, 1.0, 2.0, 4.0)
 
 DEFAULT_CONFIG = {
     "_help": "How many lighting sequences you made in Lightkey for each section (0-24), and how to pick "
@@ -55,6 +58,10 @@ DEFAULT_CONFIG = {
     "pair_builds_with_drops": False,
     # Every pool starts empty: set each to the number of sequences you actually made.
     "pools": {name: 0 for name in POOL_CHANNELS},
+    # Bars between new looks within one long section (0 = one look per section).
+    "change_every": {name: 0 for name in POOL_CHANNELS},
+    # Blackout before each drop: off, fixed (beats) or music (the track's own silent gap).
+    "blackout": {"mode": "off", "beats": 1.0},
 }
 
 

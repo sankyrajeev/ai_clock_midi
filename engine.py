@@ -25,7 +25,8 @@ import numpy as np
 
 import pools as pl
 import prolink_sync as ps
-from phrases import CueMidi, PhraseTracker, VirtualCdj
+import waveform as wf
+from phrases import AGAIN, BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE, CueMidi, PhraseTracker, VirtualCdj
 from projects import NAME_TIP, ProjectManager, ProjectStore
 
 log = logging.getLogger("prolink_sync.app")
@@ -152,6 +153,9 @@ class LumiereEngine:
     def _start_network(self) -> None:
         self.tracker = PhraseTracker(self._emit, self._level, follow=self.settings.follow,
                                      lead=self.settings.latency_ms / 1000.0)
+        self.tracker.change_every = self._change_every
+        self.tracker.blackout_beats = self._blackout_beats
+        self._gaps: dict = {}
         broadcast = None
         if self.settings.demo:
             from simrig import SimRig
@@ -261,8 +265,42 @@ class LumiereEngine:
     def _emit(self, cue: str) -> None:
         if not (self.live and self.settings.phrases and self.cue_out):
             return
-        pick = self.cue_out.event(cue)
-        self._record(cue, self._where(), pick)
+        if cue == BLACKOUT:
+            self.cue_out.blackout()
+            self._record(cue, self._where() + " · before the drop")
+        elif cue.startswith(AGAIN):
+            name = cue[len(AGAIN):]
+            pick = self.cue_out.event(name, section_note=False)
+            if pick:
+                self._record(name, self._where() + " · next look", pick)
+        else:
+            pick = self.cue_out.event(cue)
+            self._record(cue, self._where(), pick)
+
+    # -- settings the phrase tracker asks for, beat by beat
+
+    def _change_every(self, cue: str) -> int:
+        cfg = self.manager.project.config
+        if cue not in self.manager.pools.pools:  # no sequences to change to
+            return 0
+        return int((cfg.get("change_every") or {}).get(cue, 0) or 0)
+
+    def _blackout_beats(self, key: tuple, drop_beat: int) -> float:
+        bo = self.manager.project.config.get("blackout") or {}
+        mode = bo.get("mode", "off")
+        if mode == "fixed":
+            return float(bo.get("beats", 1.0))
+        if mode != "music" or not self.tracker:
+            return 0.0
+        if (key, drop_beat) not in self._gaps:
+            bands = self.tracker.waveforms.get(key)
+            if bands is None:
+                return 0.0  # no waveform yet: ask again next beat
+            grid = self.tracker.grids.get(key, [])
+            bpm = grid[0].bpm if grid else 120.0
+            self._gaps[(key, drop_beat)] = wf.gap_before(bands, grid, drop_beat, bpm)
+            log.info("Gap before the drop at beat %d: %.1f beats", drop_beat, self._gaps[(key, drop_beat)])
+        return self._gaps[(key, drop_beat)]
 
     def _level(self, cc: int, value: float) -> None:
         if self.live and self.settings.phrases and self.cue_out:
@@ -362,6 +400,8 @@ class LumiereEngine:
 
     def do_fire(self, cue: str) -> None:
         """A pad pressed by hand: sends even while paused."""
+        if cue == BLACKOUT:
+            return self.do_send_blackout()
         if self.cue_out:
             pick = self.cue_out.event(cue)
             self._record(cue, "by hand", pick)
@@ -377,8 +417,38 @@ class LumiereEngine:
             self.manager.mark_learned(pool, int(seq))
         self._record(pool, "for MIDI Learn" if learn else "by hand", (int(seq), p.count))
 
+    def do_send_blackout(self, learn: bool = False) -> None:
+        if self.cue_out:
+            self.cue_out.blackout()
+        if learn:
+            self.manager.mark_learned(BLACKOUT, 1)
+        self._record(BLACKOUT, "for MIDI Learn" if learn else "by hand")
+
+    def do_set_change_every(self, pool: str, bars: int) -> None:
+        if pool not in pl.POOL_CHANNELS or int(bars) not in pl.CHANGE_EVERY:
+            raise ValueError("choose 0, 8, 16 or 32 bars")
+        self._update_config(lambda cfg: cfg.setdefault("change_every", {}).__setitem__(pool, int(bars)))
+
+    def do_set_blackout(self, mode: Optional[str] = None, beats: Optional[float] = None) -> None:
+        if mode is not None and mode not in pl.BLACKOUT_MODES:
+            raise ValueError("unknown blackout mode")
+        if beats is not None and float(beats) not in pl.BLACKOUT_BEATS:
+            raise ValueError("unknown blackout length")
+
+        def change(cfg):
+            bo = cfg.setdefault("blackout", {"mode": "off", "beats": 1.0})
+            if mode is not None:
+                bo["mode"] = mode
+            if beats is not None:
+                bo["beats"] = float(beats)
+        self._update_config(change)
+
     def do_unmap(self, pool: str, seq: int) -> None:
         """Clear a sequence's MAPPED mark (Lightkey's own mapping is cleared in Lightkey)."""
+        if pool == BLACKOUT:
+            self.manager.unmark_learned(BLACKOUT, 1)
+            self._record(BLACKOUT, "unmapped")
+            return
         if pool not in pl.POOL_CHANNELS:
             raise ValueError("no such pool")
         self.manager.unmark_learned(pool, int(seq))
@@ -470,6 +540,7 @@ class LumiereEngine:
             count = raw.get("count", 0) if isinstance(raw, dict) else int(raw)
             live_pool = self.manager.pools.pools.get(name)
             pools_state[name] = {"count": count, "channel": pl.POOL_CHANNELS[name],
+                                 "every": int((project.config.get("change_every") or {}).get(name, 0) or 0),
                                  "learned": sorted(n for n in project.learned.get(name, []) if n <= count),
                                  "last": live_pool.last if live_pool else None}
         with self.lock:
@@ -494,7 +565,10 @@ class LumiereEngine:
                         "lightkey_name": project.lightkey_name},
             "pools": {"mode": project.config.get("mode", "shuffle"),
                       "pair": bool(project.config.get("pair_builds_with_drops", False)),
-                      "pools": pools_state},
+                      "pools": pools_state,
+                      "blackout": {**{"mode": "off", "beats": 1.0}, **(project.config.get("blackout") or {}),
+                                   "learned": 1 in project.learned.get(BLACKOUT, []),
+                                   "channel": BLACKOUT_CHANNEL, "note": BLACKOUT_NOTE}},
             "log": log_entries,
             "flashes": flashes,
             "ports": {"clock": CLOCK_PORT, "cues": CUE_PORT, "ok": "midi" not in self.errors},

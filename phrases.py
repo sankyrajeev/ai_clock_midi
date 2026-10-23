@@ -42,6 +42,9 @@ INTRO, OUTRO, VERSE, BRIDGE, PRE_DROP, NEW_TRACK = "intro", "outro", "verse", "b
 NOTES = {BREAKDOWN: 36, BUILD: 37, DROP: 38, PHRASE: 39, BAR: 40,
          INTRO: 41, OUTRO: 42, VERSE: 43, BRIDGE: 44, PRE_DROP: 45, NEW_TRACK: 46}
 CC_ENERGY, CC_BUILD = 20, 23
+# Blackout before a drop: its own channel and a note no other cue uses.
+BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE = "blackout", 10, 60
+AGAIN = "again:"  # prefix: the next look from the same pool, mid-section
 
 # How "big" each kind of section is, sent as CC 20 so one fader mapping can
 # follow the energy of the track.
@@ -448,6 +451,10 @@ class PhraseTracker:
         self.announced: Optional[tuple] = None   # (deck, track_key, phrase index) last announced
         self.timers: list[threading.Timer] = []
         self.on_track: Optional[Callable[[CdjStatus], None]] = None  # asks for analysis downloads
+        # Set by the app: bars between looks for a section kind (0 = keep one look), and
+        # how many beats to black out before a drop (track key, drop beat) -> beats.
+        self.change_every: Callable[[str], int] = lambda cue: 0
+        self.blackout_beats: Callable[[tuple, int], float] = lambda key, beat: 0.0
 
     # -- inputs -------------------------------------------------------------
 
@@ -582,21 +589,53 @@ class PhraseTracker:
             self.announced = (device, key, None)
             return
         phrase = tp.phrases[idx]
-        if self.announced != (device, key, idx):
+        just_announced = self.announced != (device, key, idx)
+        if just_announced:
             if self.announced is None or self.announced[:2] != (device, key):
                 self.emit(NEW_TRACK)
             self._announce(tp, idx, beat)
             self.announced = (device, key, idx)
-        else:
-            into = beat - phrase.beat
-            if into > 0 and into % 32 == 0:
-                self.emit(PHRASE)
         nxt = tp.phrases[idx + 1] if idx + 1 < len(tp.phrases) else None
-        if nxt and nxt.cue == DROP and phrase.cue != DROP and nxt.beat - beat == 4:
-            self.emit(PRE_DROP)
+        into = beat - phrase.beat
+        if not just_announced and into > 0:
+            if into % 32 == 0:
+                self.emit(PHRASE)
+            bars = self.change_every(phrase.cue)
+            end = nxt.beat if nxt else tp.end_beat
+            # A fresh look every N bars, unless the section is nearly over.
+            if bars and into % (bars * 4) == 0 and end - beat >= bars * 2:
+                self.emit(AGAIN + phrase.cue)
+        if nxt and nxt.cue == DROP and phrase.cue != DROP:
+            if nxt.beat - beat == 4:
+                self.emit(PRE_DROP)
+            self._maybe_blackout(device, key, beat, nxt.beat)
         if phrase.cue == BUILD:
             end = nxt.beat if nxt else tp.end_beat
             self.level(CC_BUILD, (beat - phrase.beat) / max(1, end - phrase.beat))
+
+    def _maybe_blackout(self, device: int, key: tuple, beat: int, drop_beat: int) -> None:
+        """Black out `blackout_beats` before the drop (whole or half beats)."""
+        length = self.blackout_beats(key, drop_beat)
+        if length <= 0:
+            return
+        start = drop_beat - length
+        if beat != int(start):
+            return
+        frac = start - int(start)
+        if frac < 1e-6:
+            self.emit(BLACKOUT)
+            return
+        bpm = self.decks[device].bpm or 120
+        timer = threading.Timer(frac * 60 / bpm, self._blackout_later, (device, beat))
+        timer.daemon = True
+        self.timers.append(timer)
+        timer.start()
+
+    def _blackout_later(self, device: int, beat: int) -> None:
+        with self.lock:
+            deck = self.decks.get(device)
+            if device == self.followed and deck and deck.beat is not None and abs(deck.beat - beat) <= 1:
+                self.emit(BLACKOUT)
 
     def _announce(self, tp: TrackPhrases, idx: int, beat: int) -> None:
         phrase = tp.phrases[idx]
@@ -977,12 +1016,17 @@ class CueMidi:
         if pools is not None:
             log.info("Sequence pools: %s", pools.describe())
 
-    def event(self, name: str) -> Optional[tuple[int, int]]:
-        """Send a section cue; returns (sequence, pool size) when a pool sequence was picked."""
+    def blackout(self) -> None:
+        self.note(BLACKOUT_CHANNEL, BLACKOUT_NOTE)
+
+    def event(self, name: str, section_note: bool = True) -> Optional[tuple[int, int]]:
+        """Send a section cue; returns (sequence, pool size) when a pool sequence was picked.
+        section_note=False sends only the pool's sequence (a new look mid-section)."""
         note = NOTES.get(name)
         if note is None:
             return None
-        self.note(1, note)
+        if section_note:
+            self.note(1, note)
         choice = self.pools.choose(name) if self.pools is not None else None
         if not choice:
             return None

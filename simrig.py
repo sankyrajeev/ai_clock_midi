@@ -35,7 +35,8 @@ EPS = wf.ENTRIES_PER_SECOND
 # Section layouts in bars: (bars, kind). Kept short so every cue comes round quickly.
 SET = [
     {"title": "Rush Hour", "artist": "Mira Vale", "key": "8A", "bpm": 128.0, "phrases": True,
-     "sections": [(8, "intro"), (8, "up"), (16, "drop"), (8, "down"), (8, "up"), (16, "drop"), (8, "outro")]},
+     "sections": [(8, "intro"), (8, "up"), (16, "drop"), (8, "down"), (8, "up"), (16, "drop"), (8, "outro")],
+     "gap_before_drop": 1.0},  # a beat of silence before each drop, as many tracks have
     {"title": "Low Tide (Extended Mix)", "artist": "Okan & Sela", "key": "9A", "bpm": 126.0, "phrases": False,
      "sections": [(8, "intro"), (16, "drop"), (8, "down"), (8, "up"), (16, "drop"), (8, "outro")]},
 ]
@@ -78,6 +79,15 @@ def make_track(spec: dict, rekordbox_id: int, seed: int = 0) -> SimTrack:
         hat = 0.6 + 0.4 * (np.abs(phase - 0.5) < 0.08)
         highs.append(hi * hat * (1 + 0.1 * rng.standard_normal(n)))
         beat += bars * 4
+    gap = spec.get("gap_before_drop", 0)
+    if gap:  # silence the end of every section that leads into a drop
+        sizes = [len(a) for a in lows]
+        for i, (_, kind) in enumerate(spec["sections"][:-1]):
+            if spec["sections"][i + 1][1] == "drop" and kind != "drop":
+                n = int(gap * beat_len * EPS)
+                for band in (lows, mids, highs):
+                    band[i] = band[i].copy()
+                    band[i][sizes[i] - n:] = 2
     beats = beat - 1
     pssi = ph.build_pssi(ph.HIGH, starts, beats + 1) if spec["phrases"] else None
     return SimTrack(rekordbox_id, spec["title"], spec.get("artist", ""), spec.get("key", ""), bpm, beats, pssi,
