@@ -799,6 +799,7 @@ body { padding: 0 !important; margin: 0; }
     intro: { label: "Intro", c: "--b-mid" }, build: { label: "Build", c: "--b-low" }, drop: { label: "Drop", c: "--b-sub" },
     breakdown: { label: "Breakdown", c: "--b-high" }, outro: { label: "Outro", c: "--b-mid" },
     verse: { label: "Verse", c: "--b-lowmid" }, bridge: { label: "Bridge", c: "--b-air" },
+    chorus: { label: "Chorus", c: "--amber" },
   };
   const CUES = [
     { id: "intro", name: "Intro", note: 41, c: "--b-mid" }, { id: "build", name: "Build", note: 37, c: "--b-low" },
@@ -812,9 +813,9 @@ body { padding: 0 !important; margin: 0; }
   const byId = Object.fromEntries(CUES.map(c => [c.id, c]));
   const POOL_META = [["drop", "Drop", "--b-sub"], ["build", "Build", "--b-low"], ["breakdown", "Breakdown", "--b-high"],
     ["pre_drop", "Pre-drop", "--brass"], ["intro", "Intro", "--b-mid"], ["outro", "Outro", "--b-mid"],
-    ["verse", "Verse", "--b-lowmid"], ["bridge", "Bridge", "--b-air"]];
+    ["verse", "Verse", "--b-lowmid"], ["bridge", "Bridge", "--b-air"], ["chorus", "Chorus", "--amber"]];
   const SRC = { rekordbox: "rekordbox phrases", waveform: "Waveform analysis", live: "Live audio" };
-  const ENERGY = { intro: .45, build: .6, drop: 1, breakdown: .25, outro: .4, verse: .55, bridge: .4 };
+  const ENERGY = { intro: .45, build: .6, drop: 1, breakdown: .25, outro: .4, verse: .55, bridge: .4, chorus: .85 };
   const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   const noteName = n => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2);
   const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -931,7 +932,8 @@ body { padding: 0 !important; margin: 0; }
     $("deckTag").textContent = `CDJ ${d.n}`;
     $("deckState").textContent = d.master ? "Tempo master" + (d.on_air ? " · on air" : "") : d.on_air ? "On air" : d.playing ? "Playing" : "Cued";
     $("deckSrc").dataset.src = d.source || "";
-    $("deckSrc").textContent = d.source ? SRC[d.source] : d.analysing ? "Reading the track…" : "No section data";
+    $("deckSrc").textContent = (d.source ? SRC[d.source] : d.analysing ? "Reading the track…" : "No section data") +
+      (d.style ? (d.style === "song" ? " · Song" : " · Club") : "");
     $("deckTitle").textContent = d.title || "Unknown track";
     $("deckArtist").textContent = [d.artist, d.musical_key].filter(Boolean).join(" · ") +
       (d.source === "waveform" ? " · sections read from the waveform" : d.source === "rekordbox" ? " · phrase analysis found" : "");
@@ -1142,7 +1144,8 @@ body { padding: 0 !important; margin: 0; }
       </div>`; }).join(""));
     const p = P[selPool], meta = POOL_META.find(m => m[0] === selPool);
     $("pdName").textContent = meta[1];
-    $("pdSub").textContent = p.count ? `${p.count} sequence${p.count === 1 ? "" : "s"} · MIDI channel ${p.channel} · notes ${noteName(36)}–${noteName(35 + p.count)}` : "Switched off. Press + to add sequences.";
+    $("pdSub").textContent = p.count ? `${p.count} sequence${p.count === 1 ? "" : "s"} · MIDI channel ${p.channel} · notes ${noteName(36)}–${noteName(35 + p.count)}` : selPool === "chorus" ? "Empty: song choruses (pop, hip hop…) borrow your Drop looks. Press + to give them their own."
+      : "Switched off. Press + to add sequences.";
     $("tiles").style.setProperty("--pc", css(meta[2]));
     setHTML($("tiles"), Array.from({ length: 24 }, (_, i) => { const n = i + 1, used = n <= p.count, mapped = used && p.learned.includes(n);
       return `<button class="tile${used ? "" : " unused"}${mapped ? " mapped" : ""}${used && p.last === n ? " last" : ""}" data-n="${n}" ${used ? "" : "disabled"} aria-label="${meta[1]} sequence ${n}${mapped ? ", mapped in Lightkey" : ""}">${n}${mapped ? '<span class="unmap" role="button" title="Unmap this sequence" aria-label="Unmap">✕</span><span class="ok">✓</span><span class="map">MAPPED</span>' : ""}<small>${noteName(35 + n)}</small></button>`; }).join(""));

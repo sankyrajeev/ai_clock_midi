@@ -113,3 +113,12 @@ def test_learn_helper_steps_through_each_sequence():
     sent.clear()
     pl.learn(lambda ch, note: sent.append((ch, note)), pools, only="build", ask=lambda q: "", say=lines.append)
     assert sent == [(3, 36), (3, 37)]
+
+
+def test_chorus_uses_its_own_pool_or_borrows_the_drop_looks():
+    only_drops = make(pools={"drop": 3})
+    ch, note, seq = only_drops.choose("chorus")
+    assert ch == pl.POOL_CHANNELS["drop"] and 1 <= seq <= 3   # no song looks yet
+    with_chorus = make(pools={"drop": 3, "chorus": 2})
+    ch, note, seq = with_chorus.choose("chorus")
+    assert ch == pl.POOL_CHANNELS["chorus"] == 11 and seq in (1, 2)

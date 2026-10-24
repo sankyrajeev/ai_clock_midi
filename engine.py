@@ -601,6 +601,8 @@ class LumiereEngine:
             "master": bool(st and st.master and fresh),
             "on_air": bool(st and st.on_air and fresh),
             "source": tp.source if tp else None,
+            # rekordbox's own read of the track: club (build/drop) or song (verse/chorus)
+            "style": (("club" if tp.mood == 1 else "song") if tp and tp.source == "rekordbox" else None),
             "analysing": bool(key and key not in t.analysis),
             "phrases": [{"beat": p.beat, "cue": p.cue, "label": p.label} for p in tp.phrases] if tp else [],
             "end_beat": tp.end_beat if tp else 0,

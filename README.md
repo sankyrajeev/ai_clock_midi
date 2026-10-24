@@ -168,7 +168,7 @@ Lumière Link picks one each time:
   played, the drop that follows uses drop sequence 7. Design build 7 and drop 7
   to belong together, and they'll always arrive together.
 
-There are 8 pools, each with up to 24 sequences:
+There are 9 pools, each with up to 24 sequences:
 
 | Pool | When it fires |
 |---|---|
@@ -180,6 +180,7 @@ There are 8 pools, each with up to 24 sequences:
 | **Outro** | a track's outro starts |
 | **Verse** | verse sections (vocal / lower-energy tracks) |
 | **Bridge** | bridge sections |
+| **Chorus** | the chorus of a song (pop, hip hop, R&B…). Empty? Choruses use your Drop looks |
 
 ### 6.2 Make the sequences in Lightkey
 
@@ -267,7 +268,21 @@ saves the ✓ marks by itself. Restarting the Mac changes nothing.
 With Learn switched off, clicking a tile just plays that sequence, which is a
 quick way to check it.
 
-### 6.6 New looks in long sections, and a blackout before the drop
+### 6.6 Club tracks and songs
+
+rekordbox reads each track either as a **club** track (Intro, Up, Down, Chorus,
+Outro, which Lumière Link plays as Intro, Build, Breakdown, Drop, Outro) or as a
+**song** (Intro, Verse, Chorus, Bridge, Outro: pop, hip hop, R&B…). The deck
+shows which: e.g. **rekordbox phrases · Song**.
+
+- In songs, a **chorus is not a drop**: it uses the **Chorus** pool. Until you
+  make chorus looks, choruses borrow your Drop looks.
+- rekordbox cuts songs into small pieces (Verse 1, Verse 2, a bar here and
+  there). Lumière Link joins them into proper sections, so the look doesn't
+  change every couple of bars. For more movement in a long verse, use
+  **New look every** on the Verse pool.
+
+### 6.7 New looks in long sections, and a blackout before the drop
 
 Both are in the **Sequences** window, under the tiles, and start **off**.
 
@@ -433,6 +448,7 @@ Yes: **Demo mode** (part 4).
 | Outro | 7 | 36 | 59 |
 | Verse | 8 | 36 | 59 |
 | Bridge | 9 | 36 | 59 |
+| Chorus | 11 | 36 | 59 |
 
 **Lumiere Cues, blackout before the drop:** channel 10, note 60 (C3).
 
@@ -445,7 +461,7 @@ Yes: **Demo mode** (part 4).
 | 38 | Drop | | 44 | Bridge |
 | 39 | Every 8 bars | | 45 | Pre-drop |
 | 40 | Every bar | | 46 | New track |
-| 41 | Intro | | | |
+| 41 | Intro | | 47 | Chorus (songs) |
 
 | CC (channel 1) | Value |
 |---|---|

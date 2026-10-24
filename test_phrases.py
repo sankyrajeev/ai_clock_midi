@@ -74,8 +74,8 @@ def test_pssi_masking_is_real_and_dbserver_prefix_accepted():
 
 def test_pssi_mid_mood_labels():
     tp = parse_pssi(build_pssi(MID, [(1, 1), (17, 2), (49, 8), (65, 9), (97, 10)], 129))
-    assert [p.label for p in tp.phrases] == ["Intro", "Verse 1", "Bridge", "Chorus", "Outro"]
-    assert tp.phrases[3].cue == DROP
+    assert [p.label for p in tp.phrases] == ["Intro", "Verse", "Bridge", "Chorus", "Outro"]
+    assert tp.phrases[3].cue == ph.CHORUS  # a song's chorus is not a club drop
 
 
 # --- dbserver --------------------------------------------------------------
@@ -471,3 +471,25 @@ def test_new_look_every_4_bars():
     again = [b for b, e in rig.events if e == ph.AGAIN + DROP]
     # 16-bar drops at beats 65 and 193: new looks 4, 8 and 12 bars in
     assert again == [81, 97, 113, 209, 225, 241]
+
+
+def test_hip_hop_phrases_become_steady_sections():
+    """rekordbox splits songs into Verse 1 / Verse 2 variants and 1-2 bar slivers;
+    the lights must follow sections, not change every couple of bars."""
+    LOW = ph.LOW
+    raw = [(1, 1),                                   # intro
+           (17, 2), (25, 5), (33, 3), (41, 6), (45, 2),  # verse 1/2 variants, one 1-bar sliver
+           (57, 9), (65, 9), (73, 2), (77, 9),       # chorus, chorus, 1-bar verse sliver, chorus
+           (89, 5), (121, 10)]                       # verse 2, outro
+    tp = parse_pssi(build_pssi(LOW, raw, 137))
+    assert [(p.beat, p.cue) for p in tp.phrases] == [
+        (1, INTRO), (17, ph.VERSE), (57, ph.CHORUS), (89, ph.VERSE), (121, OUTRO)]
+
+
+def test_club_variants_merge_but_short_builds_stay():
+    # Up 1 / Up 2 variants (kind 2 twice) are one build; Chorus twice is one drop;
+    # a 2-bar build right before the drop is kept in club tracks.
+    raw = [(1, 1), (33, 2), (49, 2), (65, 5), (97, 5), (129, 3), (153, 2), (161, 5), (193, 6)]
+    tp = parse_pssi(build_pssi(HIGH, raw, 225))
+    assert [(p.beat, p.cue) for p in tp.phrases] == [
+        (1, INTRO), (33, BUILD), (65, DROP), (129, BREAKDOWN), (153, BUILD), (161, DROP), (193, OUTRO)]
