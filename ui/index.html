@@ -799,7 +799,6 @@ body { padding: 0 !important; margin: 0; }
     intro: { label: "Intro", c: "--b-mid" }, build: { label: "Build", c: "--b-low" }, drop: { label: "Drop", c: "--b-sub" },
     breakdown: { label: "Breakdown", c: "--b-high" }, outro: { label: "Outro", c: "--b-mid" },
     verse: { label: "Verse", c: "--b-lowmid" }, bridge: { label: "Bridge", c: "--b-air" },
-    chorus: { label: "Chorus", c: "--amber" },
   };
   const CUES = [
     { id: "intro", name: "Intro", note: 41, c: "--b-mid" }, { id: "build", name: "Build", note: 37, c: "--b-low" },
@@ -811,11 +810,13 @@ body { padding: 0 !important; margin: 0; }
     { id: "blackout", name: "Blackout", note: 60, c: "--unit" },
   ];
   const byId = Object.fromEntries(CUES.map(c => [c.id, c]));
+  // In songs (pop, hip hop) a chorus plays the drop looks but is shown as a chorus.
+  const kindOf = (d, p) => d && d.style === "song" && p.cue === "drop" ? { label: "Chorus", c: KIND.drop.c } : (KIND[p.cue] || KIND.verse);
   const POOL_META = [["drop", "Drop", "--b-sub"], ["build", "Build", "--b-low"], ["breakdown", "Breakdown", "--b-high"],
     ["pre_drop", "Pre-drop", "--brass"], ["intro", "Intro", "--b-mid"], ["outro", "Outro", "--b-mid"],
-    ["verse", "Verse", "--b-lowmid"], ["bridge", "Bridge", "--b-air"], ["chorus", "Chorus", "--amber"]];
+    ["verse", "Verse", "--b-lowmid"], ["bridge", "Bridge", "--b-air"]];
   const SRC = { rekordbox: "rekordbox phrases", waveform: "Waveform analysis", live: "Live audio" };
-  const ENERGY = { intro: .45, build: .6, drop: 1, breakdown: .25, outro: .4, verse: .55, bridge: .4, chorus: .85 };
+  const ENERGY = { intro: .45, build: .6, drop: 1, breakdown: .25, outro: .4, verse: .55, bridge: .4 };
   const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   const noteName = n => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2);
   const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -878,7 +879,7 @@ body { padding: 0 !important; margin: 0; }
   function segs(d) {
     if (!d.phrases.length) return "";
     return d.phrases.map((p, i) => { const e = i + 1 < d.phrases.length ? d.phrases[i + 1].beat : d.end_beat;
-      return `<div style="flex:${Math.max(1, e - p.beat)};--c:${css((KIND[p.cue] || KIND.verse).c)}"></div>`; }).join("");
+      return `<div style="flex:${Math.max(1, e - p.beat)};--c:${css((kindOf(d, p)).c)}"></div>`; }).join("");
   }
   function renderRack() {
     const f = shownDeck;
@@ -951,7 +952,7 @@ body { padding: 0 !important; margin: 0; }
     if (key !== stripKey) {
       stripKey = key;
       $("strip").innerHTML = d.phrases.length ? d.phrases.map((p, i) => { const e = i + 1 < d.phrases.length ? d.phrases[i + 1].beat : d.end_beat;
-        return `<div class="seg" style="flex:${Math.max(1, e - p.beat)};--c:${css((KIND[p.cue] || KIND.verse).c)}"><span>${(KIND[p.cue] || KIND.verse).label}</span></div>`; }).join("")
+        return `<div class="seg" style="flex:${Math.max(1, e - p.beat)};--c:${css((kindOf(d, p)).c)}"><span>${(kindOf(d, p)).label}</span></div>`; }).join("")
         : `<div class="seg none"><span>${d.analysing ? "Reading the track…" : "No section data for this track"}</span></div>`;
       const total = wf && wf.duration_s ? wf.duration_s : d.end_beat ? secs(d.end_beat) : 0;
       $("ticks").innerHTML = total ? [0, 1, 2, 3, 4].map(i => `<span>${fmt(total * i / 4)}</span>`).join("") : "";
@@ -959,12 +960,12 @@ body { padding: 0 !important; margin: 0; }
     const idx = phraseIndex(d, beat);
     [...$("strip").children].forEach((s, i) => { s.classList.toggle("past", i < idx); s.classList.toggle("current", i === idx); });
     if (idx >= 0) {
-      const p = d.phrases[idx], k = KIND[p.cue] || KIND.verse, end = idx + 1 < d.phrases.length ? d.phrases[idx + 1].beat : d.end_beat;
+      const p = d.phrases[idx], k = kindOf(d, p), end = idx + 1 < d.phrases.length ? d.phrases[idx + 1].beat : d.end_beat;
       $("nowBox").style.setProperty("--c", css(k.c)); $("nowName").textContent = k.label;
       $("nowHint").textContent = (d.source === "rekordbox" ? `rekordbox “${p.label}”` : "from the waveform") + ` · bar ${Math.floor((beat - p.beat) / 4) + 1} of ${Math.max(1, Math.round((end - p.beat) / 4))}`;
       const nx = d.phrases[idx + 1];
       if (nx) {
-        const nk = KIND[nx.cue] || KIND.verse, left = nx.beat - beat, bars = Math.floor(left / 4), rem = left % 4, pl = (q, w) => `${q} ${w}${q === 1 ? "" : "s"}`;
+        const nk = kindOf(d, nx), left = nx.beat - beat, bars = Math.floor(left / 4), rem = left % 4, pl = (q, w) => `${q} ${w}${q === 1 ? "" : "s"}`;
         $("nextBox").style.setProperty("--c", css(nk.c)); $("nextName").textContent = nk.label;
         $("nextHint").innerHTML = `in <b>${left <= 4 ? pl(left, "beat") : rem ? pl(bars, "bar") + " " + pl(rem, "beat") : pl(bars, "bar")}</b>`;
         $("countArc").setAttribute("stroke-dashoffset", String(138.2 * Math.min(1, left / Math.max(1, end - p.beat))));
@@ -1029,7 +1030,7 @@ body { padding: 0 !important; margin: 0; }
     for (let k = Math.ceil(b - span / 2); k <= b + span / 2; k++) {
       if (k < 1) continue;
       const x = Math.round((timeOfBeat(d, wf, k) - t0) / (t1 - t0) * w), down = (k - 1) % 4 === 0, ph = d.phrases.find(p => p.beat === k);
-      if (ph) { c.fillStyle = css((KIND[ph.cue] || KIND.verse).c); c.fillRect(x, 0, 2, h); c.font = "700 10px Manrope, sans-serif"; c.fillText((KIND[ph.cue] || KIND.verse).label.toUpperCase(), x + 6, 13); }
+      if (ph) { c.fillStyle = css((kindOf(d, ph)).c); c.fillRect(x, 0, 2, h); c.font = "700 10px Manrope, sans-serif"; c.fillText((kindOf(d, ph)).label.toUpperCase(), x + 6, 13); }
       else { c.fillStyle = `rgba(240,237,229,${down ? .14 : .06})`; c.fillRect(x, 0, 1, h); if (down) { c.fillStyle = colours().tick; c.fillRect(x - 3, h - 3, 7, 3); } }
     }
     for (let x = 0; x < w; x += 2) {
@@ -1144,8 +1145,7 @@ body { padding: 0 !important; margin: 0; }
       </div>`; }).join(""));
     const p = P[selPool], meta = POOL_META.find(m => m[0] === selPool);
     $("pdName").textContent = meta[1];
-    $("pdSub").textContent = p.count ? `${p.count} sequence${p.count === 1 ? "" : "s"} · MIDI channel ${p.channel} · notes ${noteName(36)}–${noteName(35 + p.count)}` : selPool === "chorus" ? "Empty: song choruses (pop, hip hop…) borrow your Drop looks. Press + to give them their own."
-      : "Switched off. Press + to add sequences.";
+    $("pdSub").textContent = p.count ? `${p.count} sequence${p.count === 1 ? "" : "s"} · MIDI channel ${p.channel} · notes ${noteName(36)}–${noteName(35 + p.count)}` : "Switched off. Press + to add sequences.";
     $("tiles").style.setProperty("--pc", css(meta[2]));
     setHTML($("tiles"), Array.from({ length: 24 }, (_, i) => { const n = i + 1, used = n <= p.count, mapped = used && p.learned.includes(n);
       return `<button class="tile${used ? "" : " unused"}${mapped ? " mapped" : ""}${used && p.last === n ? " last" : ""}" data-n="${n}" ${used ? "" : "disabled"} aria-label="${meta[1]} sequence ${n}${mapped ? ", mapped in Lightkey" : ""}">${n}${mapped ? '<span class="unmap" role="button" title="Unmap this sequence" aria-label="Unmap">✕</span><span class="ok">✓</span><span class="map">MAPPED</span>' : ""}<small>${noteName(35 + n)}</small></button>`; }).join(""));

@@ -38,10 +38,9 @@ ANNOUNCE_PORT, STATUS_PORT, DB_QUERY_PORT = 50000, 50002, 12523
 # mapping works for both modes.
 BREAKDOWN, BUILD, DROP, PHRASE, BAR = "breakdown", "build", "drop", "phrase", "bar"
 INTRO, OUTRO, VERSE, BRIDGE, PRE_DROP, NEW_TRACK = "intro", "outro", "verse", "bridge", "pre_drop", "new_track"
-CHORUS = "chorus"  # a song's chorus (pop, hip hop...): its own pool, not a club drop
 
 NOTES = {BREAKDOWN: 36, BUILD: 37, DROP: 38, PHRASE: 39, BAR: 40,
-         INTRO: 41, OUTRO: 42, VERSE: 43, BRIDGE: 44, PRE_DROP: 45, NEW_TRACK: 46, CHORUS: 47}
+         INTRO: 41, OUTRO: 42, VERSE: 43, BRIDGE: 44, PRE_DROP: 45, NEW_TRACK: 46}
 CC_ENERGY, CC_BUILD = 20, 23
 # Blackout before a drop: its own channel and a note no other cue uses.
 BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE = "blackout", 10, 60
@@ -49,8 +48,7 @@ AGAIN = "again:"  # prefix: the next look from the same pool, mid-section
 
 # How "big" each kind of section is, sent as CC 20 so one fader mapping can
 # follow the energy of the track.
-INTENSITY = {INTRO: 0.35, VERSE: 0.55, BUILD: 0.6, BREAKDOWN: 0.25, BRIDGE: 0.4, DROP: 1.0, OUTRO: 0.35,
-             CHORUS: 0.85}
+INTENSITY = {INTRO: 0.35, VERSE: 0.55, BUILD: 0.6, BREAKDOWN: 0.25, BRIDGE: 0.4, DROP: 1.0, OUTRO: 0.35}
 
 
 # --------------------------------------------------------------------------
@@ -378,7 +376,7 @@ def _phrase_cue(mood: int, kind: int) -> tuple[str, str]:
     if kind == 8:
         return BRIDGE, "Bridge"
     if kind == 9:
-        return CHORUS, "Chorus"
+        return DROP, "Chorus"  # a song's chorus uses the drop looks
     if mood == MID:
         return VERSE, f"Verse {kind - 1}"
     return VERSE, "Verse 1" if kind <= 4 else "Verse 2"
@@ -409,14 +407,17 @@ def parse_pssi(data: bytes) -> TrackPhrases:
     return TrackPhrases(mood, simplify(phrases, end_beat, song=mood != HIGH), end_beat)
 
 
-def simplify(phrases: list[Phrase], end_beat: int, song: bool, min_beats: int = 16) -> list[Phrase]:
+SONG_MIN_BEATS = 32  # in songs, a section shorter than 8 bars joins the one before
+
+
+def simplify(phrases: list[Phrase], end_beat: int, song: bool, min_beats: int = 0) -> list[Phrase]:
     """Turn rekordbox's fine-grained phrases into the sections lights should follow.
 
     rekordbox splits sections into variants (Verse 1 / Verse 2, Up 1 / Up 2,
     Chorus 1 / Chorus 2); consecutive phrases of the same kind become one
     section, so the look doesn't change every few bars. In songs (pop, hip
-    hop...) rekordbox also marks very short phrases; those under `min_beats`
-    join the section before them. Club tracks keep short phrases, since a
+    hop...) rekordbox also marks short phrases; those under `min_beats`
+    (8 bars) join the section before them. Club tracks keep short phrases, since a
     short build before a drop matters there."""
     def join(items: list[Phrase]) -> list[Phrase]:
         joined: list[Phrase] = []
@@ -426,14 +427,16 @@ def simplify(phrases: list[Phrase], end_beat: int, song: bool, min_beats: int = 
         return joined
 
     sections = join(phrases)
-    if song:
-        kept: list[Phrase] = []
-        for i, p in enumerate(sections):
-            end = sections[i + 1].beat if i + 1 < len(sections) else end_beat
-            if kept and end - p.beat < min_beats:
-                continue  # a sliver: part of the section before it
-            kept.append(p)
-        sections = join(kept)
+    min_beats = min_beats or SONG_MIN_BEATS
+    while song:
+        # Fold the shortest sliver into the section before it, then join again, so a
+        # chorus broken by one bar of "verse" comes back together as one chorus.
+        # The first and last sections (intro, outro) always stay.
+        lengths = [(sections[i + 1].beat - sections[i].beat, i) for i in range(1, len(sections) - 1)]
+        short = min((x for x in lengths if x[0] < min_beats), default=None)
+        if short is None:
+            break
+        sections = join(sections[:short[1]] + sections[short[1] + 1:])
     return sections
 
 

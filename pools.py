@@ -42,9 +42,9 @@ log = logging.getLogger("prolink_sync.pools")
 MAX_SEQUENCES = 24
 FIRST_NOTE = 36  # sequence 1 = C1, so 24 sequences span C1..B2
 POOL_CHANNELS = {"drop": 2, "build": 3, "breakdown": 4, "pre_drop": 5,
-                 "intro": 6, "outro": 7, "verse": 8, "bridge": 9, "chorus": 11}  # 10 is the blackout
+                 "intro": 6, "outro": 7, "verse": 8, "bridge": 9}
 LABELS = {"drop": "Drop", "build": "Build", "breakdown": "Breakdown", "pre_drop": "Pre-drop",
-          "intro": "Intro", "outro": "Outro", "verse": "Verse", "bridge": "Bridge", "chorus": "Chorus"}
+          "intro": "Intro", "outro": "Outro", "verse": "Verse", "bridge": "Bridge"}
 MODES = ("shuffle", "random", "order")
 CHANGE_EVERY = (0, 4, 8, 16, 32)         # bars
 BLACKOUT_MODES = ("off", "fixed", "music")
@@ -139,8 +139,6 @@ class SequencePools:
 
     def choose(self, cue: str) -> Optional[tuple[int, int, int]]:
         """For a section cue, return (channel, note, sequence) to send, or None if it has no pool."""
-        if cue == "chorus" and "chorus" not in self.pools:
-            cue = "drop"  # no song looks made yet: a chorus borrows the drop looks
         pool = self.pools.get(cue)
         if pool is None:
             return None

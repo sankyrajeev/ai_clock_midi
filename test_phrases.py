@@ -74,8 +74,9 @@ def test_pssi_masking_is_real_and_dbserver_prefix_accepted():
 
 def test_pssi_mid_mood_labels():
     tp = parse_pssi(build_pssi(MID, [(1, 1), (17, 2), (49, 8), (65, 9), (97, 10)], 129))
-    assert [p.label for p in tp.phrases] == ["Intro", "Verse", "Bridge", "Chorus", "Outro"]
-    assert tp.phrases[3].cue == ph.CHORUS  # a song's chorus is not a club drop
+    # the 4-bar bridge is shorter than a song section (8 bars): it stays with the verse
+    assert [p.label for p in tp.phrases] == ["Intro", "Verse", "Chorus", "Outro"]
+    assert tp.phrases[2].cue == DROP  # a song's chorus plays the drop looks
 
 
 # --- dbserver --------------------------------------------------------------
@@ -483,7 +484,7 @@ def test_hip_hop_phrases_become_steady_sections():
            (89, 5), (121, 10)]                       # verse 2, outro
     tp = parse_pssi(build_pssi(LOW, raw, 137))
     assert [(p.beat, p.cue) for p in tp.phrases] == [
-        (1, INTRO), (17, ph.VERSE), (57, ph.CHORUS), (89, ph.VERSE), (121, OUTRO)]
+        (1, INTRO), (17, ph.VERSE), (57, DROP), (89, ph.VERSE), (121, OUTRO)]
 
 
 def test_club_variants_merge_but_short_builds_stay():
@@ -493,3 +494,19 @@ def test_club_variants_merge_but_short_builds_stay():
     tp = parse_pssi(build_pssi(HIGH, raw, 225))
     assert [(p.beat, p.cue) for p in tp.phrases] == [
         (1, INTRO), (33, BUILD), (65, DROP), (129, BREAKDOWN), (153, BUILD), (161, DROP), (193, OUTRO)]
+
+
+def test_song_never_changes_look_faster_than_every_8_bars():
+    import random
+    rnd = random.Random(7)
+    for _ in range(50):  # messy songs: random verse/chorus/bridge pieces of 1-6 bars
+        raw, beat = [(1, 1)], 17
+        while beat < 400:
+            raw.append((beat, rnd.choice([2, 3, 5, 8, 9])))
+            beat += 4 * rnd.randint(1, 6)
+        raw.append((beat, 10))
+        tp = parse_pssi(build_pssi(ph.LOW, raw, beat + 32))
+        inner = tp.phrases[1:-1]
+        for a, b in zip(inner, tp.phrases[2:]):
+            assert b.beat - a.beat >= 32, (a, b)
+        assert all(x.cue != y.cue for x, y in zip(tp.phrases, tp.phrases[1:]))
