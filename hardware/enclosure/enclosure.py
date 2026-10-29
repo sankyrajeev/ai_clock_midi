@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Lumière Link venue box: a 3D-printable enclosure for everything.
+"""Lumière Resident: the 3D-printable venue box that runs Lumière Link.
 
 Holds a Raspberry Pi 4 (with its 30 mm fan), a WT32-ETH01 (ESP32 with
 Ethernet), a MAX485 RS-485 module, two XLR DMX sockets (Neutrik D-size), a
 16 mm "HOUSE" button and two 5 mm status LEDs.
 
-    python3 enclosure.py            -> out/base.stl, out/lid.stl, out/*.png previews
+    python3 enclosure.py            -> out/lumiere-resident-*.stl
 
 Every size is a number in the PARAMETERS section: measure your parts with
 calipers and adjust before printing. Units are millimetres. X = width (left to
@@ -102,8 +102,8 @@ def stadium(length, width) -> CS:
     return CS.batch_hull(ends) if length > width else CS.circle(r)
 
 
-def text_cs(txt: str, font: str, height: float) -> CS:
-    """Text outline as a CrossSection, cap height ~`height`, centred on the origin."""
+def text_cs(txt: str, font: str, height: float, max_width: float = 1e9) -> CS:
+    """Text outline as a CrossSection, ~`height` tall (shrunk to fit `max_width`), centred on the origin."""
     from matplotlib.font_manager import FontProperties
     from matplotlib.textpath import TextPath
 
@@ -111,7 +111,7 @@ def text_cs(txt: str, font: str, height: float) -> CS:
     polys = [np.asarray(p, dtype=float) for p in path.to_polygons() if len(p) > 2]
     cs = CS([p.tolist() for p in polys], mf.FillRule.EvenOdd)
     (x0, y0), (x1, y1) = (lambda b: ((b[0], b[1]), (b[2], b[3])))(cs.bounds())
-    s = height / max(1e-6, (y1 - y0))
+    s = min(height / max(1e-6, (y1 - y0)), max_width / max(1e-6, (x1 - x0)))
     cs = cs.scale([s, s]).translate([-(x0 + x1) / 2 * s, -(y0 + y1) / 2 * s])
     # Fonts have outlines that touch at single points (accents, serifs); a hair of
     # extra weight closes those pinches so the printed part is cleanly watertight.
@@ -212,7 +212,7 @@ def base() -> M:
     body -= engrave_front(text_cs("HOUSE", small, 3.4), bx, bz - 13.5)
     body -= engrave_front(text_cs("NET", small, 3.0), W - 70.0, bz - 8.0)
     body -= engrave_front(text_cs("DMX", small, 3.0), W - 58.0, bz - 8.0)
-    body -= engrave_front(text_cs("Lumière Link", "BodoniModa-Italic.ttf", 9.0), 52.0, H / 2 + 1)
+    body -= engrave_front(text_cs("Lumière Resident", "BodoniModa-Italic.ttf", 9.0, max_width=80.0), 52.0, H / 2 + 1)
     # a fine line along the front, like a rack panel
     body -= box(10, -1, 6.0, W - 10, 0.5, 6.6)
 
@@ -257,7 +257,7 @@ def lid() -> M:
     part -= ring.extrude(1.0).translate([fx, fy, LID - 0.6])
     # brand on top
     tx = (pi_xy(0, PI_WID)[0] + W) / 2 + 2
-    title = text_cs("Lumière Link", "BodoniModa-Italic.ttf", 12.0)
+    title = text_cs("Lumière Resident", "BodoniModa-Italic.ttf", 12.0, max_width=W - pi_xy(0, PI_WID)[0] - 14)
     part -= title.extrude(1.0).translate([tx, D / 2 + 6, LID - 0.7])
     by = text_cs("VITAL  ACOUSTICA", "Manrope.ttf", 3.4)
     part -= by.extrude(1.0).translate([tx, D / 2 - 9, LID - 0.5])
@@ -311,35 +311,6 @@ def check(b: M, l: M) -> list[str]:
     return problems
 
 
-def render(parts: list[tuple[M, str]], path: Path, elev=28, azim=-58, title="") -> None:
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-
-    fig = plt.figure(figsize=(12, 8), dpi=110, facecolor="#101010")
-    ax = fig.add_subplot(111, projection="3d", facecolor="#101010")
-    light = np.array([0.4, -0.6, 0.7]) / np.linalg.norm([0.4, -0.6, 0.7])
-    lo, hi = np.full(3, 1e9), np.full(3, -1e9)
-    for part, colour in parts:
-        tm = to_trimesh(part)
-        tris = tm.vertices[tm.faces]
-        shade = np.clip(0.35 + 0.65 * np.abs(tm.face_normals @ light), 0, 1)
-        base_rgb = np.array(matplotlib.colors.to_rgb(colour))
-        cols = np.clip(base_rgb[None, :] * shade[:, None], 0, 1)
-        ax.add_collection3d(Poly3DCollection(tris, facecolors=cols, edgecolors="none"))
-        lo, hi = np.minimum(lo, tm.vertices.min(0)), np.maximum(hi, tm.vertices.max(0))
-    span = (hi - lo).max() / 2
-    mid = (hi + lo) / 2
-    ax.set_xlim(mid[0] - span, mid[0] + span); ax.set_ylim(mid[1] - span, mid[1] + span); ax.set_zlim(mid[2] - span, mid[2] + span)
-    ax.set_box_aspect([1, 1, 1]); ax.view_init(elev=elev, azim=azim); ax.set_axis_off()
-    if title:
-        fig.text(0.5, 0.93, title, color="#EFE6CF", ha="center", fontsize=16)
-    fig.savefig(path, facecolor="#101010", bbox_inches="tight")
-    plt.close(fig)
-
-
 def main() -> None:
     out = HERE / "out"
     out.mkdir(exist_ok=True)
@@ -347,16 +318,10 @@ def main() -> None:
     printable_lid = l.rotate([180, 0, 0]).translate([0, D, LID])  # upside down, top face on the bed
     for part, name in ((b, "base"), (printable_lid, "lid")):
         assert part.status() == mf.Error.NoError, name
-        to_trimesh(part).export(out / f"lumiere-venue-box-{name}.stl")
+        to_trimesh(part).export(out / f"lumiere-resident-{name}.stl")
     problems = check(b, l)
     print("Outer size: %.0f x %.0f x %.0f mm" % (W, D, H + LID))
     print("Fit check:", "OK, nothing collides" if not problems else "; ".join(problems))
-    brass, body, pcb = "#B8A47B", "#2A2926", "#3E7A4E"
-    render([(b, body), (l.translate([0, 0, H + 28]), body)], out / "preview-exploded.png", title="Lumière Link venue box")
-    render([(b, body)] + [(p, pcb if "Pi" in n or "WT32" in n or "MAX" in n else brass) for n, p in dummies().items()],
-           out / "preview-inside.png", elev=55, azim=-70, title="Inside: Pi 4 · WT32-ETH01 · MAX485 · 2 × XLR")
-    render([(b, body), (l.translate([0, 0, H]), body)], out / "preview-back.png", elev=18, azim=118, title="Back panel")
-    render([(b, body), (l.translate([0, 0, H]), body)], out / "preview-front.png", elev=18, azim=-62, title="Front")
 
 
 if __name__ == "__main__":

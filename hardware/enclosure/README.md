@@ -1,6 +1,13 @@
-# Lumière Link venue box: 3D-printed enclosure
+# Lumière Resident: the venue box (3D-printed enclosure)
 
-One box, 170 × 106 × 44 mm, holds the whole venue setup: a Raspberry Pi 4 (with
+The Lumière family:
+
+- **Lumière Link**: the software (on a Mac with Lightkey for touring shows,
+  or inside a Resident).
+- **Lumière Resident**: the box that stays at a venue and runs the lights on its own.
+- **Lumière Node**: the ESP32 DMX output, if it's ever sold on its own.
+
+One Resident, 170 × 106 × 44 mm, holds the whole venue setup: a Raspberry Pi 4 (with
 its fan), the ESP32 DMX board (WT32-ETH01), the RS-485 module, two DMX outputs,
 a **HOUSE** button and two status LEDs.
 
@@ -10,13 +17,20 @@ a **HOUSE** button and two status LEDs.
 
 | File | Print orientation |
 |---|---|
-| `out/lumiere-venue-box-base.stl` | As it comes: open side up |
-| `out/lumiere-venue-box-lid.stl` | As it comes: already upside down, top face on the bed |
+| `out/lumiere-resident-base.stl` | As it comes: open side up |
+| `out/lumiere-resident-lid.stl` | As it comes: already upside down, top face on the bed |
 
 ## Print settings
 
-- **Material:** PETG (best for a hot club: it won't soften near lights or in a
-  hot rack). PLA is fine for trying the fit. Matte black or dark grey looks classy.
+- **Material:**
+  - **ASA for the final box** (best): takes about 95 °C in hot booths and racks,
+    doesn't fade in sunlight, and has a premium matte finish. Needs an enclosed
+    printer (or no drafts), a brim and a 100–110 °C bed; ventilate the room.
+    ASA shrinks about 0.5–0.7 %: scale the model to ~100.5 % in the slicer.
+  - **PETG** if ASA gives trouble: tough, about 80 °C, a little glossier.
+  - **PLA for test fits only**: it softens at 55–60 °C, so a box left in a hot
+    booth or car can warp.
+  - Matte black or dark grey looks classy.
 - **Layer height:** 0.2 mm (0.16 mm for crisper lettering).
 - **Walls:** 4 perimeters; infill 20–25 % gyroid.
 - **Supports:** none needed for the base. The openings are small enough to bridge.
