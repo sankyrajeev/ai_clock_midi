@@ -177,9 +177,25 @@ Settings are stored in the active project (above); the format is:
   the drop's first bars hit), a roll (8+ hits), hits, or a riser (sound with no
   hits). Hits are found in the mid and high bands separately: a jump of at
   least 45 % of the level above the 4 entries before it that dies away again,
-  so a roll still shows over a white-noise riser. Hits are snapped to the 1/16 grid and sent on time
-  (timers within the beat): channel 10 note 61 per hit, note 62 when a roll
-  starts, CC 24 = hits in the beat / 8.
+  so a roll still shows over a white-noise riser. A hit on the same 1/32 step
+  in both bands is one hit; hi-hats (highs only) where the drop has its hats
+  never count. Hits are snapped to the 1/32 grid and sent on time (timers
+  within the beat): channel 10 note 61 per hit, note 62 when a roll starts,
+  CC 24 = hits in the beat / 8.
+- `build_fx` (true/false): `waveform.build_curve` for every Up section and every
+  section leading into a drop. Snare speed per beat: the fastest of 1, 2, 4, 8
+  hits per beat whose grid is 75 %+ filled, provided the positions it adds over
+  the next slower grid hold a hit that isn't the drop's groove in that band (so
+  off-beat hats under a 1/4 roll stay 1/4); lone gaps take their neighbours'
+  speed, lone single beats are dropped. Sent as CC 25 each beat (0, 25, 50, 75,
+  100 %). Riser: mids + highs per quarter beat, smoothed over a beat, scaled
+  from the build's 5th to 98th percentile, sent as CC 26 four times a beat (Up
+  sections only). Both go to 0 when the section ends.
+- Scored by `test_build_fx.py` on 200 generated tracks (`buildcorpus.py`: seven
+  roll schedules, kick/hats/riser in or out, 118–175 BPM, noise, grid offsets)
+  plus 200 harder ones; `analyse_tracks.py` runs the same analysis over the
+  ANLZ files on a rekordbox USB stick (PQTZ grid and PPTH path in .DAT, PSSI in
+  .EXT, PWV7 in .2EX) and writes a CSV report.
 
 ## Phrase cues over the network (recommended)
 

@@ -341,6 +341,118 @@ def _onsets(env: np.ndarray, floor: float, min_gap: int) -> list[int]:
     return sorted(picked)
 
 
+class _HitScanner:
+    """Finds hits (snare, clap, stab, a roll's strokes) in the mids and highs of a
+    stretch of track, measured against the drop that follows: how loud it is,
+    how hard it hits and where its own groove hits."""
+
+    def __init__(self, bands: Bands, grid: list[GridBeat], bpm: float, drop_beat: int):
+        self.grid, self.bpm = grid, bpm
+        self.low = bands.low.astype(float)
+        self.hi_env = bands.mid.astype(float) + bands.high
+        self.level = self.low + self.hi_env
+        self.n = n = len(self.level)
+        self.step = 60.0 / (bpm or 120) / 8  # a 1/32 note, in seconds
+        self.min_gap = max(2, int(self.step * ENTRIES_PER_SECOND * 0.7))
+        self.ok = n > 0 and drop_beat > 4 and self.entries(drop_beat, drop_beat + 8)[1] < n - 1
+        if not self.ok:
+            return
+        self.ref_level = float(np.median(self.beat_peaks(self.level, drop_beat, 8))) or 1.0
+        # Hits are found in the mids and the highs separately, so a snare roll still
+        # shows over a loud white-noise riser. Each is a jump above the sound just
+        # before it, compared with how hard the drop hits in that band.
+        self.hit_bands = [bands.mid.astype(float), bands.high.astype(float)]
+        d0, d1 = self.entries(drop_beat, drop_beat + 8)
+        self.ref_rise = [float(np.percentile(_rises(b[d0:d1]), 99)) or 1.0 for b in self.hit_bands]
+        self.groove_bands: list[set] = [set(), set()]  # empty while the drop itself is scanned
+        drop_bars = [self.hits_by_band(drop_beat + 4 * k, drop_beat + 4 * k + 4) for k in (0, 1)]
+        for k, bar in enumerate(drop_bars):
+            for h, bands_hit in bar:
+                for b in bands_hit:
+                    self.groove_bands[b].add(int(round((h - drop_beat - 4 * k) * 8)) % 32)
+        self.groove = set().union(*self.groove_bands)
+        self.groove_hits = max(len(h) for h in drop_bars)
+
+    def entries(self, b0: float, b1: float) -> tuple[int, int]:
+        return _entries(self.grid, self.bpm, b0, b1, self.n)
+
+    def beat_peaks(self, arr: np.ndarray, b0: float, beats: int) -> np.ndarray:
+        out = []
+        for b in range(beats):
+            lo, hi = self.entries(b0 + b, b0 + b + 1)
+            out.append(float(arr[lo:hi].max()) if hi > lo else 0.0)
+        return np.array(out)
+
+    def hits(self, b0: float, b1: float) -> list[float]:
+        """Track beats (fractional, on the 1/32 grid) of the hits from b0 up to b1 that
+        are worth a flash: everything except hi-hats where the drop has its hi-hats."""
+        return [h for h, bands_hit in self.hits_by_band(b0, b1)
+                if not (bands_hit == {1} and self.is_groove(b0, h, bands_hit))]
+
+    def hits_by_band(self, b0: float, b1: float) -> list[tuple[float, frozenset]]:
+        """Each hit from b0 up to b1 and which bands it showed in (0 = mids, 1 = highs)."""
+        lo, hi = self.entries(b0, b1)
+        lo2 = max(0, lo - 4)  # a little before, so a hit right on b0 shows as a rise
+        start = _seconds_at(self.grid, self.bpm, b0)
+        beat_entries = int(8 * self.step * ENTRIES_PER_SECOND)
+        found: dict[float, set] = {}
+        for k, (band, ref) in enumerate(zip(self.hit_bands, self.ref_rise)):
+            env = band[lo2:hi]
+            if len(env) < 4:
+                continue
+            rise = _rises(env)
+            # Loud enough for this band, and among the strongest in this stretch.
+            floor = max(0.3 * ref, 0.45 * float(rise.max()), 0.12 * self.ref_level)
+            onsets = _onsets(env, floor, self.min_gap)
+            for j, i in enumerate(onsets):
+                end = min(onsets[j + 1] if j + 1 < len(onsets) else len(env), i + beat_entries)
+                peak = float(env[i:i + 3].max())
+                if rise[i] < 0.45 * peak:  # a wobble on a loud sound, not a hit
+                    continue
+                # A hit dies away again; a sound that rises and stays is a riser.
+                if end > i + 3 and env[i + 3:end].min() > peak - 0.6 * rise[i]:
+                    continue
+                q = round(round((lo2 + i) / ENTRIES_PER_SECOND - start, 6) / self.step) / 8
+                if not 0 <= q < b1 - b0:
+                    continue
+                # One sound often shows in both bands: on the same 1/32 step as a hit
+                # the other band found, it's the same hit.
+                same = next((f for f in found if abs(f - (b0 + q)) < 0.07 and k not in found[f]), None)
+                found.setdefault(b0 + q if same is None else same, set()).add(k)
+        return sorted((h, frozenset(b)) for h, b in found.items())
+
+    def is_groove(self, b0: float, hit: float, bands: frozenset) -> bool:
+        """Does this hit sit where the drop's groove hits in the same band (a hat, a clap)?"""
+        step = int(round((hit - b0) * 8)) % 32
+        return all(any((step + d) % 32 in self.groove_bands[k] for d in (-1, 0, 1)) for k in bands)
+
+    @staticmethod
+    def pattern(b0: float, hits: list[float]) -> set[int]:
+        """Where in the bar the hits are, as 1/32 steps (0-31)."""
+        return {int(round((h - b0) * 8)) % 32 for h in hits}
+
+    def bar_kind(self, b0: float, hits: list[float]) -> str:
+        lo, hi = self.entries(b0, b0 + 4)
+        loudest = float(np.percentile(self.level[lo:hi], 95))
+        pat = self.pattern(b0, hits)
+        # Share of this bar's hits that sit where the drop's own groove hits (hats,
+        # claps), give or take a 1/32 step.
+        near = {(g + d) % 32 for g in self.groove for d in (-1, 0, 1)}
+        on_groove = len(pat & near) / len(pat) if pat else 0.0
+        peak = float(np.percentile(self.level[lo:hi], 99)) if hi > lo else 0.0  # not the next bar's first hit
+        if loudest < 0.2 * self.ref_level and peak < 0.35 * self.ref_level and not hits:
+            return SILENCE
+        if on_groove >= 0.8 and len(hits) <= self.groove_hits + 1:
+            return GROOVE
+        if len(hits) >= 8:
+            return ROLL
+        if hits:
+            return HITS
+        if float(self.hi_env[lo:hi].mean()) >= 0.15 * self.ref_level:  # sound, but nothing hits
+            return RISER
+        return GROOVE
+
+
 def drop_fill(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
               bars: int = FILL_BARS) -> DropFill:
     """Read the last `bars` bars before `drop_beat` and sort each into silence, hits
@@ -348,92 +460,16 @@ def drop_fill(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
     the normal groove. Hits are measured on the mids and highs, so the kick
     doesn't count; a bar whose hits sit on the drop's own pattern (its hats and
     claps) is the normal groove, with or without the kick."""
-    low = bands.low.astype(float)
-    hi_env = bands.mid.astype(float) + bands.high
-    level = low + hi_env
-    n = len(level)
-    if not n or drop_beat <= 4:
+    scan = _HitScanner(bands, grid, bpm, drop_beat)
+    if not scan.ok:
         return DropFill([])
-    sixteenth = 60.0 / (bpm or 120) / 4
-    min_gap = max(2, int(sixteenth * ENTRIES_PER_SECOND * 0.7))
-
-    # The drop itself is the reference: how loud the music is, how hard it hits,
-    # and its groove pattern.
-    def beat_peaks(arr: np.ndarray, b0: float, beats: int) -> np.ndarray:
-        out = []
-        for b in range(beats):
-            lo, hi = _entries(grid, bpm, b0 + b, b0 + b + 1, n)
-            out.append(float(arr[lo:hi].max()) if hi > lo else 0.0)
-        return np.array(out)
-
-    if _entries(grid, bpm, drop_beat, drop_beat + 8, n)[1] >= n - 1:
-        return DropFill([])
-    ref_level = float(np.median(beat_peaks(level, drop_beat, 8))) or 1.0
-    # Hits are found in the mids and the highs separately, so a snare roll still
-    # shows over a loud white-noise riser. Each is measured as a jump above the
-    # sound just before it, compared with how hard the drop hits in that band.
-    hit_bands = [bands.mid.astype(float), bands.high.astype(float)]
-    d0, d1 = _entries(grid, bpm, drop_beat, drop_beat + 8, n)
-    ref_rise = [float(np.percentile(_rises(b[d0:d1]), 99)) or 1.0 for b in hit_bands]
-    beat_entries = int(4 * sixteenth * ENTRIES_PER_SECOND)
-
-    def bar_hits(b0: float) -> list[float]:
-        lo, hi = _entries(grid, bpm, b0, b0 + 4, n)
-        lo2 = max(0, lo - 4)  # a little before the bar, so a hit right on beat 1 shows as a rise
-        start = _seconds_at(grid, bpm, b0)
-        beats = set()
-        for band, ref in zip(hit_bands, ref_rise):
-            env = band[lo2:hi]
-            if len(env) < 4:
-                continue
-            rise = _rises(env)
-            floor = max(0.3 * ref, 0.45 * float(rise.max()), 0.12 * ref_level)
-            onsets = _onsets(env, floor, min_gap)
-            for j, i in enumerate(onsets):
-                # A hit dies away again; a sound that rises and stays is a riser, not a hit.
-                end = min(onsets[j + 1] if j + 1 < len(onsets) else len(env), i + beat_entries)
-                peak = float(env[i:i + 3].max())
-                if rise[i] < 0.45 * peak:  # a wobble on a loud sound, not a hit
-                    continue
-                if end > i + 3 and env[i + 3:end].min() > peak - 0.6 * rise[i]:
-                    continue
-                q = round((lo2 + i) / ENTRIES_PER_SECOND - start, 6) / sixteenth
-                q = round(q) / 4  # on the 1/16 grid, in beats from the bar's start
-                if 0 <= q < 4:
-                    beats.add(b0 + q)
-        return sorted(beats)
-
-    def pattern(b0: float, hits: list[float]) -> set[int]:
-        return {int(round((h - b0) * 4)) % 16 for h in hits}
-
-    drop_bars = [bar_hits(drop_beat + 4 * k) for k in (0, 1)]
-    groove = [pattern(drop_beat + 4 * k, h) for k, h in enumerate(drop_bars)]
-    groove_hits = max(len(h) for h in drop_bars)
-
     kinds, hits_by_bar = [], []
     for k in range(bars, 0, -1):
         b0 = drop_beat - 4 * k
         if b0 < 1:
             continue
-        hits = bar_hits(b0)
-        lo, hi = _entries(grid, bpm, b0, b0 + 4, n)
-        loudest = float(np.percentile(level[lo:hi], 95))
-        pat = pattern(b0, hits)
-        # Share of this bar's hits that sit where the drop's own groove hits (hats, claps).
-        on_groove = len(pat & set().union(*groove)) / len(pat) if pat else 0.0
-        if loudest < 0.2 * ref_level:
-            kind = SILENCE
-        elif on_groove >= 0.8 and len(hits) <= groove_hits + 1:
-            kind = GROOVE
-        elif len(hits) >= 8:
-            kind = ROLL
-        elif hits:
-            kind = HITS
-        elif float(hi_env[lo:hi].mean()) >= 0.15 * ref_level:  # sound, but nothing hits
-            kind = RISER
-        else:
-            kind = GROOVE
-        kinds.append(kind)
+        hits = scan.hits(b0, b0 + 4)
+        kinds.append(scan.bar_kind(b0, hits))
         hits_by_bar.append((b0, hits))
 
     fill = DropFill(kinds)
@@ -448,8 +484,109 @@ def drop_fill(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
         if kind == ROLL and fill.roll_start is None:
             fill.roll_start = b0
     if fill.hits:
-        per_beat = {}
+        per_beat: dict[int, int] = {}
         for h in fill.hits:
             per_beat[int(h)] = per_beat.get(int(h), 0) + 1
         fill.per_beat = float(max(per_beat.values()))
     return fill
+
+
+# --------------------------------------------------------------------------
+# Build-ups: how fast the snare roll goes, how loud the riser gets
+# --------------------------------------------------------------------------
+
+ROLL_RATES = (1, 2, 4, 8)  # hits per beat: 1/4, 1/8, 1/16 and 1/32 notes
+RATE_NAMES = {1: "1/4", 2: "1/8", 4: "1/16", 8: "1/32"}
+
+
+@dataclass
+class BuildCurve:
+    """A build-up read from the waveform, beat by beat, for driving effect speed."""
+    start: int                  # first beat of the build
+    end: int                    # the beat after it (usually the drop)
+    rate: list[int]             # each beat: snare hits per beat (0 = no roll, else 1/2/4/8)
+    intensity: list[float]      # each quarter beat: the riser's level, 0-1 across the build
+
+    def speed(self, beat: float) -> float:
+        """0-1 for an effect speed fader: no roll 0, then 1/4 0.25, 1/8 0.5, 1/16 0.75, 1/32 1."""
+        i = int(beat) - self.start
+        r = self.rate[i] if 0 <= i < len(self.rate) else 0
+        return 0.0 if not r else (ROLL_RATES.index(r) + 1) / len(ROLL_RATES)
+
+    def intensity_at(self, beat: float) -> float:
+        i = int(round((beat - self.start) * 4))
+        if not self.intensity:
+            return 0.0
+        return self.intensity[max(0, min(len(self.intensity) - 1, i))]
+
+    def describe(self) -> str:
+        """e.g. "roll 1/8 from bar 5, 1/16 from bar 7, 1/32 from bar 8" (bars of the build)."""
+        parts, last = [], 0
+        for i, r in enumerate(self.rate):
+            if r != last and not (r == 0 and i >= len(self.rate) - 2):  # a silent beat before the drop
+                parts.append(f"{RATE_NAMES[r]} from bar {i // 4 + 1}" if r else f"stops at bar {i // 4 + 1}")
+                last = r
+        return "roll " + ", ".join(parts) if parts else "no roll"
+
+
+def _roll_rate(hits: list[tuple[float, bool]]) -> int:
+    """Snare hits per beat (0, 1, 2, 4 or 8) from one beat's hits: (position in the
+    beat 0-1, sits on the groove). The fastest grid that's mostly filled wins, but
+    only if the positions it adds over the next slower one hold a hit that isn't
+    the groove: hats on the off-beat under a 1/4 roll don't make it a 1/8 roll.
+    -1: the only hit is on the beat where the groove hits too (a snare on 2 and 4
+    where the drop has its clap), so the roll's speed comes from the beats around it."""
+    best = 0
+    for r in ROLL_RATES:
+        tol = 0.01 if r == 8 else 0.13
+        slots = [k / r for k in range(r)]
+        filled = [any(abs(p - s) <= tol for p, _ in hits) for s in slots]
+        if sum(filled) < 0.75 * r:
+            break
+        new = slots if r == 1 else slots[1::2]  # the positions this speed adds
+        if any(any(abs(p - s) <= tol and not g for p, g in hits) for s in new):
+            best = r
+        elif r == 1:
+            best = -1  # beat 1's hit is the groove (a clap): a faster roll can still show
+    return best
+
+
+def build_curve(bands: Bands, grid: list[GridBeat], start: int, end: int, bpm: float) -> Optional[BuildCurve]:
+    """Read the build-up from `start` up to `end` (the drop): the snare roll's speed on
+    every beat, and the riser's level every quarter beat."""
+    scan = _HitScanner(bands, grid, bpm, end)
+    if not scan.ok or end - start < 4:
+        return None
+    rate: list[int] = []
+    for b0 in range(start, end, 4):
+        b1 = min(b0 + 4, end)
+        hits = scan.hits_by_band(b0, b1)
+        if b1 - b0 == 4 and scan.bar_kind(b0, scan.hits(b0, b1)) not in (ROLL, HITS):
+            rate.extend([0] * 4)  # the groove, a riser or silence: no roll here
+            continue
+        bar = [(h, scan.is_groove(b0, h, bands_hit)) for h, bands_hit in hits]
+        rate.extend(_roll_rate([(h - b, g) for h, g in bar if b <= h < b + 1]) for b in range(b0, b1))
+    # A hit that's also where the groove hits takes the speed of the roll around it.
+    for i in range(len(rate)):
+        if rate[i] == -1:
+            near = [rate[j] for j in (i - 1, i + 1) if 0 <= j < len(rate) and rate[j] > 0]
+            rate[i] = near[0] if near else 0
+    # A roll doesn't skip a beat: a lone missed beat inside a roll takes its neighbours' speed.
+    for i in range(1, len(rate) - 1):
+        if rate[i] < min(rate[i - 1], rate[i + 1]):
+            rate[i] = min(rate[i - 1], rate[i + 1])
+    # A lone "roll" beat with no roll around it is a stray hit.
+    for i in range(len(rate)):
+        if rate[i] and not any(rate[j] for j in (i - 1, i + 1) if 0 <= j < len(rate)):
+            rate[i] = 0
+
+    # The riser: mids and highs, a quarter beat at a time, smoothed over a beat and
+    # scaled from the quietest to the loudest point of the build.
+    steps = [scan.entries(start + q / 4, start + (q + 1) / 4) for q in range((end - start) * 4)]
+    raw = np.array([float(scan.hi_env[lo:hi].mean()) if hi > lo else 0.0 for lo, hi in steps])
+    padded = np.concatenate([raw[:1].repeat(2), raw, raw[-1:].repeat(1)]) if len(raw) else raw
+    smooth = np.convolve(padded, np.ones(4) / 4, mode="valid") if len(raw) else raw
+    lo, hi = float(np.percentile(smooth, 5)), float(np.percentile(smooth, 98))
+    span = max(hi - lo, 0.15 * scan.ref_level)
+    intensity = [round(float(v), 3) for v in np.clip((smooth - lo) / span, 0, 1)]
+    return BuildCurve(start, end, rate, intensity)

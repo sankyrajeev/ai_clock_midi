@@ -64,6 +64,8 @@ DEFAULT_CONFIG = {
     "blackout": {"mode": "off", "beats": 1.0},
     # Flash on each hit, and strobe on a roll, in the bars before a drop (read from the waveform).
     "fills": True,
+    # Move effect speed with the snare roll and size with the riser through build-ups.
+    "build_fx": True,
 }
 
 

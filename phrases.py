@@ -50,6 +50,9 @@ AGAIN = "again:"  # prefix: the next look from the same pool, mid-section
 # roll's speed: hits per beat / 8.
 FILL_HIT, FILL_ROLL = "fill_hit", "fill_roll"
 FILL_HIT_NOTE, FILL_ROLL_NOTE, CC_FILL = 61, 62, 24
+# Build-ups, read from the waveform: the snare roll's speed (no roll 0, then 1/4,
+# 1/8, 1/16, 1/32 = 25/50/75/100 %) and the riser's level, for effect speed and size.
+CC_BUILD_SPEED, CC_BUILD_INTENSITY = 25, 26
 
 # How "big" each kind of section is, sent as CC 20 so one fader mapping can
 # follow the energy of the track.
@@ -507,6 +510,9 @@ class PhraseTracker:
         self.blackout_beats: Callable[[tuple, int], float] = lambda key, beat: 0.0
         # The fill before a drop (waveform.DropFill), or None: (track key, drop beat) -> fill
         self.drop_fill: Callable[[tuple, int], object] = lambda key, beat: None
+        # The build-up from start to end beat (waveform.BuildCurve), or None
+        self.build_curve: Callable[[tuple, int, int], object] = lambda key, start, end: None
+        self._building = False   # build faders are up
 
     # -- inputs -------------------------------------------------------------
 
@@ -696,6 +702,30 @@ class PhraseTracker:
         if phrase.cue == BUILD:
             end = nxt.beat if nxt else tp.end_beat
             self.level(CC_BUILD, (beat - phrase.beat) / max(1, end - phrase.beat))
+        self._build_faders(device, key, beat, phrase, nxt, tp.end_beat)
+
+    def _build_faders(self, device: int, key: tuple, beat: int, phrase: Phrase,
+                      nxt: Optional[Phrase], end_beat: int) -> None:
+        """Through a build-up (or whatever leads into a drop), move the speed fader with
+        the snare roll and the intensity fader with the riser, four times a beat."""
+        into_drop = nxt is not None and nxt.cue == DROP and phrase.cue != DROP
+        curve = (self.build_curve(key, phrase.beat, nxt.beat if nxt else end_beat)
+                 if phrase.cue == BUILD or into_drop else None)
+        if curve is None:
+            if self._building:
+                self._building = False
+                self.level(CC_BUILD_SPEED, 0.0)
+                self.level(CC_BUILD_INTENSITY, 0.0)
+            return
+        self._building = True
+        self.level(CC_BUILD_SPEED, curve.speed(beat))
+        rising = phrase.cue == BUILD  # a breakdown's pads aren't a riser
+        self.level(CC_BUILD_INTENSITY, curve.intensity_at(beat) if rising else 0.0)
+        if rising:
+            beat_len = 60.0 / (self.decks[device].bpm or 120)
+            for q in (1, 2, 3):
+                self._later(q / 4 * beat_len, device, beat,
+                            lambda v=curve.intensity_at(beat + q / 4): self.level(CC_BUILD_INTENSITY, v))
 
     def _maybe_blackout(self, device: int, key: tuple, beat: int, drop_beat: int) -> None:
         """Black out `blackout_beats` before the drop (whole or half beats)."""
@@ -734,16 +764,19 @@ class PhraseTracker:
 
     def _emit_later(self, delay: float, device: int, beat: int, cue: str) -> None:
         """Send `cue` part-way through `beat`, unless the deck has moved on meanwhile."""
-        timer = threading.Timer(delay, self._emit_if_still, (device, beat, cue))
+        self._later(delay, device, beat, lambda: self.emit(cue))
+
+    def _later(self, delay: float, device: int, beat: int, action: Callable[[], None]) -> None:
+        timer = threading.Timer(delay, self._if_still, (device, beat, action))
         timer.daemon = True
         self.timers = [t for t in self.timers if t.is_alive()] + [timer]
         timer.start()
 
-    def _emit_if_still(self, device: int, beat: int, cue: str) -> None:
+    def _if_still(self, device: int, beat: int, action: Callable[[], None]) -> None:
         with self.lock:
             deck = self.decks.get(device)
             if device == self.followed and deck and deck.beat is not None and abs(deck.beat - beat) <= 1:
-                self.emit(cue)
+                action()
 
     def _announce(self, tp: TrackPhrases, idx: int, beat: int) -> None:
         phrase = tp.phrases[idx]

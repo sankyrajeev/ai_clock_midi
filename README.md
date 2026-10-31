@@ -304,6 +304,21 @@ In Lightkey, make one **Blackout** cue (everything off) and map it once: with
 its own message (channel 10, note C3), so it never clashes with a sequence.
 The **Blackout** pad under Lighting cues fires it by hand.
 
+**Follow the build** (on the Build pool, beta). Through every build-up,
+Lumière Link moves two faders for you, read from the track's waveform:
+
+| Fader | Follows | Map it in Lightkey to |
+|---|---|---|
+| **Speed fader** (CC 25) | the snare roll: none 0 %, 1/4 notes 25 %, 1/8 50 %, 1/16 75 %, 1/32 100 % | strobe speed, or how fast movers go up and down |
+| **Intensity fader** (CC 26) | how loud the riser gets, 0–100 % across the build | a dimmer, effect size or brightness |
+
+They move with the music: a build that holds and then doubles its snare makes
+the speed jump at that moment, and a build with no roll leaves it at zero. Both
+drop to zero when the drop lands. To map one, put the Lightkey control you want
+into MIDI Learn, switch on **Learn** here and click the fader's button (it
+sweeps the fader up and down). The line under **Follow the build** shows the
+build playing now or the next one.
+
 **Hits & rolls before the drop** (on the Drop pool, beta). Lumière Link reads
 the last 4 bars before every drop from the track's waveform as soon as the
 track loads, and sorts each bar:
@@ -320,6 +335,19 @@ the **Roll cue** (channel 10, note D3) to a strobe, the same way as the
 Blackout cue. CC 24 carries the roll's speed (hits per beat / 8) if you want to
 drive a strobe rate with it. Under the option, **Next drop** shows what it
 found in the track that's playing.
+
+**Test it on your own tracks first.** Plug in your rekordbox USB stick and
+run this in Terminal, in the Lumière Link folder:
+
+```bash
+.venv/bin/python3 analyse_tracks.py
+```
+
+It reads every track on the stick (and in rekordbox on this Mac) the way the
+app does live, and in about a minute prints how many build-ups have a roll,
+what comes before each drop, and a few tracks to check by ear. Everything is
+in `lumiere-track-report.csv` (opens in Numbers or Excel): every build with
+its roll speeds by bar, and every drop with what comes before it.
 
 ---
 
@@ -472,6 +500,7 @@ Yes: **Demo mode** (part 4).
 **Lumiere Cues, blackout before the drop:** channel 10, note 60 (C3).
 **Fill before the drop:** each hit channel 10, note 61 (C#3); a roll starts
 channel 10, note 62 (D3); roll speed CC 24.
+**Build faders:** snare roll speed CC 25, riser level CC 26.
 
 **Lumiere Cues, channel 1** (sent on every section, whether or not pools are on):
 

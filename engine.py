@@ -26,8 +26,10 @@ import numpy as np
 import pools as pl
 import prolink_sync as ps
 import waveform as wf
-from phrases import (AGAIN, BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE, FILL_HIT, FILL_HIT_NOTE, FILL_ROLL,
-                     FILL_ROLL_NOTE, CueMidi, PhraseTracker, VirtualCdj)
+from phrases import (AGAIN, BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE, BUILD, CC_BUILD_INTENSITY, CC_BUILD_SPEED,
+                     DROP, FILL_HIT, FILL_HIT_NOTE, FILL_ROLL, FILL_ROLL_NOTE, CueMidi, PhraseTracker, VirtualCdj)
+
+BUILD_FADERS = {"build_speed": CC_BUILD_SPEED, "build_intensity": CC_BUILD_INTENSITY}
 from projects import NAME_TIP, ProjectManager, ProjectStore
 
 log = logging.getLogger("prolink_sync.app")
@@ -159,6 +161,8 @@ class LumiereEngine:
         self.tracker.change_every = self._change_every
         self.tracker.blackout_beats = self._blackout_beats
         self.tracker.drop_fill = self._drop_fill
+        self.tracker.build_curve = self._build_curve
+        self._curves: dict = {}
         self._gaps: dict = {}
         self._fills: dict = {}
         self._fill_logged = -1e9
@@ -332,6 +336,45 @@ class LumiereEngine:
             log.info("Before the drop at beat %d: %s (bars: %s)", drop_beat, fill.describe(), ", ".join(fill.bars))
         return self._fills[(key, drop_beat)]
 
+    def _build_curve(self, key: tuple, start: int, end: int):
+        if not self.manager.project.config.get("build_fx", True) or not self.tracker:
+            return None
+        if (key, start, end) not in self._curves:
+            bands = self.tracker.waveforms.get(key)
+            if bands is None:
+                return None  # no waveform yet: ask again next beat
+            grid = self.tracker.grids.get(key, [])
+            bpm = grid[0].bpm if grid else 120.0
+            curve = wf.build_curve(bands, grid, start, end, bpm)
+            self._curves[(key, start, end)] = curve
+            if curve:
+                log.info("Build-up at beat %d: %s", start, curve.describe())
+        return self._curves[(key, start, end)]
+
+    def _build_now(self) -> str:
+        """The build-up playing now, or the next one, on the deck the lights follow."""
+        t = self.tracker
+        if not t:
+            return ""
+        with t.lock:
+            deck = t.decks.get(t.followed) if t.followed else None
+            tp = t._followed_phrases()
+            if not deck or not tp or deck.beat is None:
+                return ""
+            key, ph = deck.status.track_key, tp.phrases
+            spans = [(p.beat, ph[i + 1].beat if i + 1 < len(ph) else tp.end_beat) for i, p in enumerate(ph)
+                     if p.cue == BUILD or (i + 1 < len(ph) and ph[i + 1].cue == DROP and p.cue != DROP)]
+            span = next(((a, b) for a, b in spans if b > deck.beat), None)
+            beat = deck.beat
+        if span is None or key not in t.waveforms:
+            return ""
+        curve = self._build_curve(key, *span)
+        if not curve:
+            return ""
+        if span[0] <= beat:
+            return f"Now: {curve.describe()} · speed {round(curve.speed(beat) * 100)}%"
+        return f"Next build (bar {(span[0] - 1) // 4 + 1}): {curve.describe()}"
+
     def _next_fill(self) -> str:
         """What's before the next drop on the deck the lights follow, for the screen."""
         t = self.tracker
@@ -483,6 +526,26 @@ class LumiereEngine:
             self.manager.mark_learned(cue, 1)
         self._record(cue, "for MIDI Learn" if learn else "by hand")
 
+    def do_send_build_fader(self, fader: str, learn: bool = False) -> None:
+        """Sweep a build fader up and back down, so Lightkey's MIDI Learn picks it up."""
+        cc = BUILD_FADERS.get(fader)
+        if cc is None:
+            raise ValueError("no such fader")
+        if self.cue_out:
+            out = self.cue_out
+
+            def sweep():
+                for v in (0.25, 0.5, 0.75, 1.0, 0.5, 0.0):
+                    out.level(cc, v)
+                    time.sleep(0.05)
+            threading.Thread(target=sweep, daemon=True).start()
+        if learn:
+            self.manager.mark_learned(fader, 1)
+        self._record(fader, "for MIDI Learn" if learn else "by hand")
+
+    def do_set_build_fx(self, on: bool) -> None:
+        self._update_config(lambda cfg: cfg.__setitem__("build_fx", bool(on)))
+
     def do_set_fills(self, on: bool) -> None:
         self._update_config(lambda cfg: cfg.__setitem__("fills", bool(on)))
 
@@ -507,7 +570,7 @@ class LumiereEngine:
 
     def do_unmap(self, pool: str, seq: int) -> None:
         """Clear a sequence's MAPPED mark (Lightkey's own mapping is cleared in Lightkey)."""
-        if pool in (BLACKOUT, FILL_HIT, FILL_ROLL):
+        if pool in (BLACKOUT, FILL_HIT, FILL_ROLL, *BUILD_FADERS):
             self.manager.unmark_learned(pool, 1)
             self._record(pool, "unmapped")
             return
@@ -634,7 +697,10 @@ class LumiereEngine:
                       "fills": {"on": bool(project.config.get("fills", True)), "channel": BLACKOUT_CHANNEL,
                                 "hit": {"note": FILL_HIT_NOTE, "learned": 1 in project.learned.get(FILL_HIT, [])},
                                 "roll": {"note": FILL_ROLL_NOTE, "learned": 1 in project.learned.get(FILL_ROLL, [])},
-                                "next": self._next_fill()}},
+                                "next": self._next_fill()},
+                      "build_fx": {"on": bool(project.config.get("build_fx", True)), "now": self._build_now(),
+                                   **{name: {"cc": cc, "learned": 1 in project.learned.get(name, [])}
+                                      for name, cc in BUILD_FADERS.items()}}},
             "log": log_entries,
             "flashes": flashes,
             "ports": {"clock": CLOCK_PORT, "cues": CUE_PORT, "ok": "midi" not in self.errors},
