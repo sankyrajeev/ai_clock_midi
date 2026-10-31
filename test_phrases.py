@@ -510,3 +510,84 @@ def test_song_never_changes_look_faster_than_every_8_bars():
         for a, b in zip(inner, tp.phrases[2:]):
             assert b.beat - a.beat >= 32, (a, b)
         assert all(x.cue != y.cue for x, y in zip(tp.phrases, tp.phrases[1:]))
+
+
+# --- mixing between decks without a mixer --------------------------------
+
+def two_deck_rig():
+    """Deck 1 (tempo master) near the end of its track, deck 2 just started. No DJM:
+    nothing is ever on air, and nobody hands over master."""
+    rig = loaded_rig()
+    rig.status(2, 1, rbid=777, master=False, on_air=False, player=2)
+    rig.tracker.set_analysis((2, 3, 777), parse_pssi(build_pssi(HIGH, EDM, 289)))
+    return rig
+
+
+def mix(rig, beats, start1, start2, stop1_at=None):
+    """Both decks play together; deck 1 stops sending beats after `stop1_at`."""
+    b1, b2 = start1, start2
+    for _ in range(beats):
+        rig.t += 0.47
+        moving1 = stop1_at is None or b1 < stop1_at
+        if moving1:
+            b1 += 1
+            rig.beat_now = b1
+            rig.tracker.on_beat(1, (b1 - 1) % 4 + 1, 128.0, rig.t)
+        b2 += 1
+        rig.tracker.on_beat(2, (b2 - 1) % 4 + 1, 128.0, rig.t)
+        rig.t += 0.2
+        rig.status(1, b1, master=True, on_air=False)  # still says playing, still master
+        rig.status(2, b2, rbid=777, master=False, on_air=False, player=2)
+        rig.t -= 0.2
+    return b1, b2
+
+
+def test_follows_incoming_deck_when_outgoing_track_reaches_its_outro():
+    rig = two_deck_rig()
+    rig.status(1, 230)
+    mix(rig, 20, 230, 1)
+    assert rig.tracker.followed == 1  # still in its last drop
+    rig.events.clear()
+    mix(rig, 10, 250, 21)  # deck 1 enters its outro at beat 257
+    assert rig.tracker.followed == 2
+    assert NEW_TRACK in [e for _, e in rig.events]
+
+
+def test_follows_incoming_deck_as_soon_as_outgoing_track_ends():
+    rig = two_deck_rig()
+    rig.tracker.set_analysis((1, 3, 4242), parse_pssi(build_pssi(HIGH, [(1, 1), (65, 5)], 289)))  # no outro
+    rig.status(1, 270)
+    mix(rig, 15, 270, 1)
+    assert rig.tracker.followed == 1
+    mix(rig, 6, 285, 16)  # deck 1 runs off the end of its track
+    assert rig.tracker.followed == 2
+
+
+def test_follows_incoming_deck_when_outgoing_deck_stops_moving():
+    """The outgoing deck keeps its playing and master flags but its playhead stops."""
+    rig = two_deck_rig()
+    rig.tracker.set_analysis((1, 3, 4242), parse_pssi(build_pssi(HIGH, [(1, 1), (65, 5)], 400)))
+    rig.status(1, 200)
+    mix(rig, 4, 200, 1)
+    assert rig.tracker.followed == 1
+    mix(rig, 3, 204, 5, stop1_at=204)  # about 2 s with no movement on deck 1
+    assert rig.tracker.followed == 2
+
+
+def test_a_cued_deck_does_not_steal_the_lights():
+    rig = two_deck_rig()
+    rig.status(1, 260)
+    rig.play(1, 10)  # deck 1 in its outro, deck 2 loaded but not playing
+    rig.status(2, 1, rbid=777, master=False, on_air=False, playing=False, player=2)
+    assert rig.tracker.followed == 1
+
+
+def test_clock_follows_the_deck_the_lights_follow():
+    from prolink_sync import Beat, SourceSelector
+    sel = SourceSelector("auto")
+    followed = [1]
+    sel.prefer = lambda: followed[0]
+    beat = lambda dev, t: Beat(device=dev, name=f"CDJ {dev}", track_bpm=128.0, pitch=1.0, beat_in_bar=1, received=t)
+    assert sel.accept(beat(1, 0.0)) and not sel.accept(beat(2, 0.1))
+    followed[0] = 2  # the lights moved to the incoming deck
+    assert sel.accept(beat(2, 0.5)) and not sel.accept(beat(1, 0.6))

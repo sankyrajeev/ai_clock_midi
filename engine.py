@@ -123,7 +123,9 @@ class LumiereEngine:
             self.errors["midi"] = f"Couldn't create the MIDI inputs for Lightkey ({e})."
             log.error(self.errors["midi"])
         self.manager.on_switch = self._on_project_switch
-        self.clock = ps.Engine(ps.SourceSelector("auto"), self._clock_midi(), None,
+        selector = ps.SourceSelector("auto")
+        selector.prefer = lambda: self.tracker.followed if self.tracker else None
+        self.clock = ps.Engine(selector, self._clock_midi(), None,
                                latency=self.settings.latency_ms / 1000.0, stop_after=None,
                                on_status=lambda line: None)
         threading.Thread(target=self.clock.run_clock, daemon=True).start()

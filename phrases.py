@@ -468,6 +468,13 @@ class Deck:
     last_beat_packet: float = -1e9
     status_bump: float = -1e9   # when a status packet last moved the beat forward
     bpm: float = 0.0
+    moved: float = -1e9         # when the playhead last moved (beat packet or new beat number)
+
+
+# Play states (status byte 0x7B) where the deck is not moving through the track,
+# whatever the "playing" flag says: no track, loading, paused, at the cue point,
+# searching, spun down, reached the end.
+STOPPED_STATES = {0x00, 0x02, 0x05, 0x06, 0x09, 0x0E, 0x11}
 
 
 class PhraseTracker:
@@ -503,6 +510,8 @@ class PhraseTracker:
             deck.status = st
             if st.bpm:
                 deck.bpm = st.bpm
+            if st.track_key != old_key or st.beat != deck.beat:
+                deck.moved = st.received
             if st.track_key != old_key:
                 deck.beat = st.beat
                 if st.track_key and st.track_key not in self.analysis and self.on_track:
@@ -528,7 +537,7 @@ class PhraseTracker:
                 deck.beat += 1
             deck.status_bump = -1e9
             deck.beat_in_bar = beat_in_bar
-            deck.last_beat_packet = t
+            deck.last_beat_packet = deck.moved = t
             deck.bpm = bpm
             if device != self.followed:
                 return
@@ -565,19 +574,48 @@ class PhraseTracker:
             return None
         return self.analysis.get(deck.status.track_key)
 
+    def _live(self, deck: Deck, now: float) -> bool:
+        """Is this deck really playing through its track right now? The playing flag
+        alone isn't enough: a deck that ran off the end of its track can keep it."""
+        st = deck.status
+        if not st.playing or st.play_state in STOPPED_STATES:
+            return False
+        if deck.moved > -1e9:  # it has moved before, so it should keep moving
+            beat_len = 60.0 / (deck.bpm or 120.0)
+            if now - deck.moved > max(1.2, 2.5 * beat_len):
+                return False
+        tp = self.analysis.get(st.track_key) if st.track_key else None
+        return not (tp and deck.beat is not None and deck.beat >= tp.end_beat)
+
+    def _finishing(self, n: int) -> bool:
+        """The deck's track is in its outro: the DJ is mixing out of it."""
+        deck = self.decks[n]
+        tp = self.analysis.get(deck.status.track_key) if deck.status.track_key else None
+        if not tp or deck.beat is None:
+            return False
+        idx = tp.index_at(deck.beat)
+        return idx is not None and tp.phrases[idx].cue == OUTRO
+
     def _choose_deck(self, now: float) -> None:
         fresh = {n: d for n, d in self.decks.items() if d.status and now - d.status.received < 2.0}
         choice = None
         if self.follow.isdigit():
             choice = int(self.follow) if int(self.follow) in fresh else None
         else:
-            playing = sorted(n for n, d in fresh.items() if d.status.playing)
+            playing = sorted(n for n, d in fresh.items() if self._live(d, now))
             masters = [n for n in playing if fresh[n].status.master]
             on_air = [n for n in playing if fresh[n].status.on_air]
             if self.follow == "on-air":
                 choice = (on_air or masters or playing or [None])[0]
             else:
                 choice = (masters or on_air or playing or [None])[0]
+            if choice is not None and self._finishing(choice):
+                # The DJ is mixing out of this track: follow the incoming one now,
+                # instead of waiting for the tempo master to be handed over.
+                others = [n for n in playing if n != choice and not self._finishing(n)]
+                incoming = [n for n in others if fresh[n].status.on_air] or others
+                if incoming:
+                    choice = incoming[0]
             if choice is None and self.followed in fresh:
                 choice = self.followed  # keep following a paused deck
         if choice != self.followed:

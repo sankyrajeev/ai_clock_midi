@@ -125,6 +125,10 @@ class SourceSelector:
         self._last_mixer = -1e9
         self._current: Optional[int] = None
         self._last_current = -1e9
+        self._heard: dict[int, float] = {}
+        # Without a mixer, the app points this at the deck the lights follow, so
+        # the clock moves to the incoming track at the same moment they do.
+        self.prefer: Callable[[], Optional[int]] = lambda: None
 
     def accept(self, beat: Beat) -> bool:
         if self.mode == "mixer":
@@ -137,10 +141,15 @@ class SourceSelector:
         elif beat.received - self._last_mixer < self.stale_after:
             ok = False  # mixer is talking; ignore individual decks
         else:
-            # No mixer: stick with one player while it keeps beating, and
-            # move to another only once the current one has gone quiet.
-            ok = (self._current is None or beat.device == self._current
-                  or beat.received - self._last_current > self.stale_after)
+            self._heard[beat.device] = beat.received
+            preferred = self.prefer()
+            if preferred is not None and beat.received - self._heard.get(preferred, -1e9) < self.stale_after:
+                ok = beat.device == preferred
+            else:
+                # No mixer: stick with one player while it keeps beating, and
+                # move to another only once the current one has gone quiet.
+                ok = (self._current is None or beat.device == self._current
+                      or beat.received - self._last_current > self.stale_after)
         if ok:
             self._last_current = beat.received
         if ok and beat.device != self._current:

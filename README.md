@@ -416,7 +416,11 @@ Those may carry no analysis at all. That's what the optional live audio backup
 
 **How many CDJs can I use?**
 Up to 6 players plus the mixer. The lights follow the **tempo master**, so when
-the DJ hands master to the next deck, the lights move with them.
+the DJ hands master to the next deck, the lights move with them. They don't
+wait for that hand-over, though: as soon as the playing track reaches its
+outro (or ends, or stops) while another deck is playing, the lights and the
+clock move to the incoming track. This works with or without the mixer
+connected.
 
 **Do I still need PRO DJ LINK Bridge?**
 Not for Lightkey. Lumière Link talks to the CDJs directly. Keep Bridge closed

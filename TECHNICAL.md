@@ -226,6 +226,12 @@ line shows `(rekordbox)` or `(waveform)` next to the current section.
 - It follows the **tempo master** deck (`--follow on-air` or `--follow 2` to
   change). On a master hand-off it announces where the new deck is. Hot-cue
   jumps announce the new section immediately.
+- A deck only counts as playing while its playhead moves: the playing flag
+  alone can stay set after a track runs off its end. When the followed track
+  reaches its outro, ends or stops and another deck is playing, it follows the
+  incoming deck at once (on-air decks first when a DJM is connected), without
+  waiting for the tempo master to move. With no mixer, the MIDI clock follows
+  the same deck as the cues.
 - It takes a free device number from 7 up, so all six player slots stay free.
   Pick one with `--player-number`.
 - To run the USB-audio detector as a fallback for tracks with no phrase data,
