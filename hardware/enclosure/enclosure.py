@@ -71,6 +71,7 @@ ESP_CX = PI_X0 + PI_WID + 10 + ESP_WID / 2                 # RJ45 centred on the
 XLR_CX = (ESP_CX + 30.0, ESP_CX + 61.0)
 XLR_CZ = H / 2 + 1.0
 COLUMN_D = 9.0
+VENT_Y0, VENT_PITCH, VENT_N = 41.0, 7.0, 8                 # side vents, front to back; clear of USB-C and POWER
 # Lid screw posts. The back-left one sits between the Pi and the WT32: the Pi's
 # corner fills that corner of the box.
 COLUMNS = [(WALL + 4.0, WALL + 4.0), (W - WALL - 4.0, WALL + 4.0),
@@ -196,8 +197,8 @@ def base() -> M:
 
     # --- vents: slim slots low on both sides (fan in the lid pulls air through)
     slot = stadium(16.0, 2.6).extrude(WALL + 2).rotate([0, 90, 0])  # upright slot through a side wall
-    for i in range(8):
-        y = 34 + i * 7.0
+    for i in range(VENT_N):
+        y = VENT_Y0 + i * VENT_PITCH
         body -= slot.translate([-1, y, FLOOR + 14])
         body -= slot.translate([W - WALL - 1, y, FLOOR + 14])
 
@@ -302,6 +303,10 @@ def to_trimesh(part: M):
 
 def check(b: M, l: M) -> list[str]:
     problems = []
+    # Left wall: the USB-C opening (13 wide) and the POWER label must not run into the first vent
+    usbc_end = PI_Y0 + PI_USBC_AT + max(6.5, text_cs("POWER", "Manrope.ttf", 3.6).bounds()[2])
+    if VENT_Y0 - 1.3 - usbc_end < 3.0:
+        problems.append(f"first vent is {VENT_Y0 - 1.3 - usbc_end:.1f} mm from the USB-C/POWER cut-outs")
     lid_placed = l.translate([0, 0, H])
     for name, part in dummies().items():
         for shell, what in ((b, "base"), (lid_placed, "lid")):
