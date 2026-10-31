@@ -319,13 +319,19 @@ class DropFill:
         return {SILENCE: "silence", RISER: "riser"}[self.kind]
 
 
+def _rises(env: np.ndarray) -> np.ndarray:
+    """How far each entry jumps above the lowest of the 4 before it."""
+    rise = np.zeros(len(env))
+    for i in range(1, len(env)):
+        rise[i] = env[i] - env[max(0, i - 4):i].min()
+    return rise
+
+
 def _onsets(env: np.ndarray, floor: float, min_gap: int) -> list[int]:
     """Entries where `env` jumps up by at least `floor` (a hit), at least `min_gap` apart."""
     if len(env) < 4:
         return []
-    rise = np.zeros(len(env))
-    for i in range(1, len(env)):
-        rise[i] = env[i] - env[max(0, i - 4):i].min()
+    rise = _rises(env)
     picked: list[int] = []
     for i in np.argsort(-rise, kind="stable"):
         if rise[i] < floor:
@@ -340,8 +346,8 @@ def drop_fill(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
     """Read the last `bars` bars before `drop_beat` and sort each into silence, hits
     (separate stabs), a roll (8+ fast hits), a riser (rising sound with no hits) or
     the normal groove. Hits are measured on the mids and highs, so the kick
-    doesn't count; a bar whose hits match the drop's own pattern, with the kick
-    still in, is the normal groove."""
+    doesn't count; a bar whose hits sit on the drop's own pattern (its hats and
+    claps) is the normal groove, with or without the kick."""
     low = bands.low.astype(float)
     hi_env = bands.mid.astype(float) + bands.high
     level = low + hi_env
@@ -363,27 +369,38 @@ def drop_fill(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
     if _entries(grid, bpm, drop_beat, drop_beat + 8, n)[1] >= n - 1:
         return DropFill([])
     ref_level = float(np.median(beat_peaks(level, drop_beat, 8))) or 1.0
-    ref_hit = float(np.median(beat_peaks(hi_env, drop_beat, 8))) or 1.0
-    ref_low = float(np.median(beat_peaks(low, drop_beat, 8))) or 1.0
+    # Hits are found in the mids and the highs separately, so a snare roll still
+    # shows over a loud white-noise riser. Each is measured as a jump above the
+    # sound just before it, compared with how hard the drop hits in that band.
+    hit_bands = [bands.mid.astype(float), bands.high.astype(float)]
+    d0, d1 = _entries(grid, bpm, drop_beat, drop_beat + 8, n)
+    ref_rise = [float(np.percentile(_rises(b[d0:d1]), 99)) or 1.0 for b in hit_bands]
+    beat_entries = int(4 * sixteenth * ENTRIES_PER_SECOND)
 
     def bar_hits(b0: float) -> list[float]:
         lo, hi = _entries(grid, bpm, b0, b0 + 4, n)
         lo2 = max(0, lo - 4)  # a little before the bar, so a hit right on beat 1 shows as a rise
-        env = hi_env[lo2:hi]
-        floor = max(0.3 * ref_hit, 0.45 * float(env.max()) if len(env) else 0.0)
         start = _seconds_at(grid, bpm, b0)
         beats = set()
-        onsets = _onsets(env, floor, min_gap)
-        beat_entries = int(4 * sixteenth * ENTRIES_PER_SECOND)
-        for j, i in enumerate(onsets):
-            # A hit dies away again; a sound that rises and stays is a riser, not a hit.
-            end = min(onsets[j + 1] if j + 1 < len(onsets) else len(env), i + beat_entries)
-            if end > i + 3 and env[i + 3:end].min() > 0.4 * env[i:i + 3].max():
+        for band, ref in zip(hit_bands, ref_rise):
+            env = band[lo2:hi]
+            if len(env) < 4:
                 continue
-            q = round((lo2 + i) / ENTRIES_PER_SECOND - start, 6) / sixteenth
-            q = round(q) / 4  # on the 1/16 grid, in beats from the bar's start
-            if 0 <= q < 4:
-                beats.add(b0 + q)
+            rise = _rises(env)
+            floor = max(0.3 * ref, 0.45 * float(rise.max()), 0.12 * ref_level)
+            onsets = _onsets(env, floor, min_gap)
+            for j, i in enumerate(onsets):
+                # A hit dies away again; a sound that rises and stays is a riser, not a hit.
+                end = min(onsets[j + 1] if j + 1 < len(onsets) else len(env), i + beat_entries)
+                peak = float(env[i:i + 3].max())
+                if rise[i] < 0.45 * peak:  # a wobble on a loud sound, not a hit
+                    continue
+                if end > i + 3 and env[i + 3:end].min() > peak - 0.6 * rise[i]:
+                    continue
+                q = round((lo2 + i) / ENTRIES_PER_SECOND - start, 6) / sixteenth
+                q = round(q) / 4  # on the 1/16 grid, in beats from the bar's start
+                if 0 <= q < 4:
+                    beats.add(b0 + q)
         return sorted(beats)
 
     def pattern(b0: float, hits: list[float]) -> set[int]:
@@ -401,18 +418,18 @@ def drop_fill(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
         hits = bar_hits(b0)
         lo, hi = _entries(grid, bpm, b0, b0 + 4, n)
         loudest = float(np.percentile(level[lo:hi], 95))
-        kick = float(np.median(beat_peaks(low, b0, 4))) >= 0.5 * ref_low
         pat = pattern(b0, hits)
-        same = max((len(pat & g) / len(pat | g) for g in groove if pat | g), default=0.0)
+        # Share of this bar's hits that sit where the drop's own groove hits (hats, claps).
+        on_groove = len(pat & set().union(*groove)) / len(pat) if pat else 0.0
         if loudest < 0.2 * ref_level:
             kind = SILENCE
-        elif kick and same >= 0.6 and len(hits) <= groove_hits + 1:
+        elif on_groove >= 0.8 and len(hits) <= groove_hits + 1:
             kind = GROOVE
         elif len(hits) >= 8:
             kind = ROLL
         elif hits:
             kind = HITS
-        elif float(hi_env[lo:hi].mean()) >= 0.25 * ref_hit:  # sound, but nothing hits
+        elif float(hi_env[lo:hi].mean()) >= 0.15 * ref_level:  # sound, but nothing hits
             kind = RISER
         else:
             kind = GROOVE

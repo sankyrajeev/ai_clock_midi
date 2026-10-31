@@ -183,6 +183,14 @@ def fill_track(last_bars, bpm=128.0, beats=96, drop=65, seed=3):
                 hit(high, b0 + j * step, 90)
             for j in range(4):
                 hit(low, b0 + j, 200)  # the kick keeps going under the roll
+        elif what == "roll_riser":  # a snare roll over a loud white-noise riser and the kick
+            i0 = int((b0 - 1) * 60 / bpm * wf.ENTRIES_PER_SECOND)
+            i1 = int((b0 + 3) * 60 / bpm * wf.ENTRIES_PER_SECOND)
+            high[i0:i1] = np.linspace(120, 240, i1 - i0) + rng.uniform(0, 6, i1 - i0)
+            for j in range(16):
+                hit(mid, b0 + j * 0.25, 170)
+            for j in range(4):
+                hit(low, b0 + j, 200)
         elif what == "riser":
             i0 = int((b0 - 1) * 60 / bpm * wf.ENTRIES_PER_SECOND)
             i1 = int((b0 + 3) * 60 / bpm * wf.ENTRIES_PER_SECOND)
@@ -228,3 +236,8 @@ def test_riser_without_hits():
 def test_stabs_after_a_silent_bar_make_one_fill():
     fill = fill_track({57: "silence", 61: "stabs"})
     assert fill.bars[-2:] == [wf.SILENCE, wf.HITS] and fill.hits == [61.0, 62.0, 63.0, 64.0]
+
+
+def test_snare_roll_over_a_loud_riser():
+    fill = fill_track({61: "roll_riser"})
+    assert fill.kind == wf.ROLL and len(fill.hits) == 16

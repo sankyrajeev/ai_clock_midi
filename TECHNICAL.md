@@ -173,9 +173,11 @@ Settings are stored in the active project (above); the format is:
   note 60.
 - `fills` (true/false): `waveform.drop_fill` classifies each of the 4 bars
   before a drop from the mid+high band: silence (95th percentile under 20 % of
-  the drop's beat peaks), the groove (kick in and the same 1/16 hit pattern as
-  the drop's first bars), a roll (8+ hits), hits (rises that decay again), or a
-  riser (sound with no hits). Hits are snapped to the 1/16 grid and sent on time
+  the drop's beat peaks), the groove (80 %+ of its hits on the 1/16 steps where
+  the drop's first bars hit), a roll (8+ hits), hits, or a riser (sound with no
+  hits). Hits are found in the mid and high bands separately: a jump of at
+  least 45 % of the level above the 4 entries before it that dies away again,
+  so a roll still shows over a white-noise riser. Hits are snapped to the 1/16 grid and sent on time
   (timers within the beat): channel 10 note 61 per hit, note 62 when a roll
   starts, CC 24 = hits in the beat / 8.
 

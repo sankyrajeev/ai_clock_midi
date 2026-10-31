@@ -91,12 +91,12 @@ def make_track(spec: dict, rekordbox_id: int, seed: int = 0) -> SimTrack:
             t = np.arange(n) / EPS
             step = beat_len if fill == "stabs" else beat_len / 4
             hits = 220 * np.exp(-(t % step) * 30)
-            for band, values in ((mids, hits + 15), (highs, 0.6 * hits + 10)):
-                band[i] = band[i].copy()
-                band[i][-n:] = values
-            if fill == "stabs":  # the kick drops out under the stabs
-                lows[i] = lows[i].copy()
-                lows[i][-n:] = 10
+            mids[i] = mids[i].copy()
+            if fill == "stabs":  # the music drops out under the stabs
+                highs[i], lows[i] = highs[i].copy(), lows[i].copy()
+                mids[i][-n:], highs[i][-n:], lows[i][-n:] = hits + 15, 0.6 * hits + 10, 10
+            else:  # the roll plays over the build's riser and kick
+                mids[i][-n:] = np.maximum(mids[i][-n:], hits)
     gap = spec.get("gap_before_drop", 0)
     if gap:  # silence the end of every section that leads into a drop
         sizes = [len(a) for a in lows]
