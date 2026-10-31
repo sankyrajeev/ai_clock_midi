@@ -304,6 +304,23 @@ In Lightkey, make one **Blackout** cue (everything off) and map it once: with
 its own message (channel 10, note C3), so it never clashes with a sequence.
 The **Blackout** pad under Lighting cues fires it by hand.
 
+**Hits & rolls before the drop** (on the Drop pool, beta). Lumière Link reads
+the last 4 bars before every drop from the track's waveform as soon as the
+track loads, and sorts each bar:
+
+| It hears | The lights do |
+|---|---|
+| Separate synth stabs or hits (say 1‑2‑3‑4) | **Hit cue** on every hit, exactly in time |
+| A snare roll (8 or more fast hits per bar) | **Roll cue** when it starts, plus the Hit cue on every hit |
+| Silence | nothing extra: use **Blackout › Follow the music** |
+| A riser with no hits, or the normal beat | nothing extra |
+
+In Lightkey, map the **Hit cue** (channel 10, note C#3) to a flash or bump and
+the **Roll cue** (channel 10, note D3) to a strobe, the same way as the
+Blackout cue. CC 24 carries the roll's speed (hits per beat / 8) if you want to
+drive a strobe rate with it. Under the option, **Next drop** shows what it
+found in the track that's playing.
+
 ---
 
 ## 7. Connect the real gear
@@ -453,6 +470,8 @@ Yes: **Demo mode** (part 4).
 | Bridge | 9 | 36 | 59 |
 
 **Lumiere Cues, blackout before the drop:** channel 10, note 60 (C3).
+**Fill before the drop:** each hit channel 10, note 61 (C#3); a roll starts
+channel 10, note 62 (D3); roll speed CC 24.
 
 **Lumiere Cues, channel 1** (sent on every section, whether or not pools are on):
 

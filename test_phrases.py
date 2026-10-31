@@ -591,3 +591,26 @@ def test_clock_follows_the_deck_the_lights_follow():
     assert sel.accept(beat(1, 0.0)) and not sel.accept(beat(2, 0.1))
     followed[0] = 2  # the lights moved to the incoming deck
     assert sel.accept(beat(2, 0.5)) and not sel.accept(beat(1, 0.6))
+
+
+# --- hits and rolls before a drop -------------------------------------------
+
+def test_fill_hits_flash_on_their_beats_and_a_roll_starts_the_strobe():
+    import waveform as wf
+    from phrases import CC_FILL, FILL_HIT, FILL_ROLL
+    rig = loaded_rig()
+    stabs = wf.DropFill([wf.GROOVE, wf.GROOVE, wf.GROOVE, wf.HITS], hits=[61.0, 62.0, 63.5, 64.0])
+    rig.tracker.drop_fill = lambda key, beat: stabs if beat == 65 else None
+    rig.play(1, 63)  # up to beat 64 (the harness counts from beat 1)
+    assert [b for b, e in rig.events if e == FILL_HIT] == [61, 62, 64]  # on the beat: straight away
+    time.sleep(0.4)  # 63.5 is half a beat after beat 63
+    assert len([e for _, e in rig.events if e == FILL_HIT]) == 4
+    assert FILL_ROLL not in [e for _, e in rig.events]
+
+    rig = loaded_rig()
+    roll = wf.DropFill([wf.GROOVE, wf.GROOVE, wf.GROOVE, wf.ROLL],
+                       hits=[61 + i / 4 for i in range(16)], roll_start=61, per_beat=4)
+    rig.tracker.drop_fill = lambda key, beat: roll if beat == 65 else None
+    rig.play(1, 62)
+    assert (61, FILL_ROLL) in rig.events
+    assert (CC_FILL, 0.5) in rig.levels  # 4 hits per beat

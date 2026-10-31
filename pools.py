@@ -62,6 +62,8 @@ DEFAULT_CONFIG = {
     "change_every": {name: 0 for name in POOL_CHANNELS},
     # Blackout before each drop: off, fixed (beats) or music (the track's own silent gap).
     "blackout": {"mode": "off", "beats": 1.0},
+    # Flash on each hit, and strobe on a roll, in the bars before a drop (read from the waveform).
+    "fills": True,
 }
 
 

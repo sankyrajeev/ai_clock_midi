@@ -36,9 +36,12 @@ EPS = wf.ENTRIES_PER_SECOND
 SET = [
     {"title": "Rush Hour", "artist": "Mira Vale", "key": "8A", "bpm": 128.0, "phrases": True,
      "sections": [(8, "intro"), (8, "up"), (16, "drop"), (8, "down"), (8, "up"), (16, "drop"), (8, "outro")],
-     "gap_before_drop": 1.0},  # a beat of silence before each drop, as many tracks have
+     "gap_before_drop": 1.0,   # a beat of silence before each drop, as many tracks have
+     "fill_before_drop": "stabs"},  # and synth stabs on the beats before that
+
     {"title": "Low Tide (Extended Mix)", "artist": "Okan & Sela", "key": "9A", "bpm": 126.0, "phrases": False,
-     "sections": [(8, "intro"), (16, "drop"), (8, "down"), (8, "up"), (16, "drop"), (8, "outro")]},
+     "sections": [(8, "intro"), (16, "drop"), (8, "down"), (8, "up"), (16, "drop"), (8, "outro")],
+     "fill_before_drop": "roll"},  # a 1/16 snare roll over the kick in the last bar
 ]
 PSSI_KIND = {"intro": 1, "up": 2, "down": 3, "drop": 5, "outro": 6}
 BAND_LEVELS = {"intro": (120, 60, 40), "up": (20, 60, None), "drop": (200, 120, 120),
@@ -79,6 +82,21 @@ def make_track(spec: dict, rekordbox_id: int, seed: int = 0) -> SimTrack:
         hat = 0.6 + 0.4 * (np.abs(phase - 0.5) < 0.08)
         highs.append(hi * hat * (1 + 0.1 * rng.standard_normal(n)))
         beat += bars * 4
+    fill = spec.get("fill_before_drop")
+    if fill:  # rewrite the last bar of every section that leads into a drop
+        for i, (_, kind) in enumerate(spec["sections"][:-1]):
+            if spec["sections"][i + 1][1] != "drop" or kind == "drop":
+                continue
+            n = int(round(4 * beat_len * EPS))
+            t = np.arange(n) / EPS
+            step = beat_len if fill == "stabs" else beat_len / 4
+            hits = 220 * np.exp(-(t % step) * 30)
+            for band, values in ((mids, hits + 15), (highs, 0.6 * hits + 10)):
+                band[i] = band[i].copy()
+                band[i][-n:] = values
+            if fill == "stabs":  # the kick drops out under the stabs
+                lows[i] = lows[i].copy()
+                lows[i][-n:] = 10
     gap = spec.get("gap_before_drop", 0)
     if gap:  # silence the end of every section that leads into a drop
         sizes = [len(a) for a in lows]

@@ -311,6 +311,7 @@ select:disabled { color: var(--tick); }
 .look-opts .segbtn { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: auto; }
 .look-opts .segbtn button { padding: 6px 11px; }
 .look-opts .segbtn button:disabled { opacity: .35; cursor: default; }
+#fillRow .botile + .botile { margin-left: 0; }
 .botile { margin-left: auto; position: relative; border: 0; border-radius: 9px; padding: 7px 12px 7px 12px; color: var(--ivory); font-weight: 600; font-size: 12px;
   background: linear-gradient(180deg, #2B2B29, var(--body)); box-shadow: inset 0 1px 0 rgba(240,237,229,.07), 0 2px 0 #141413; display: inline-flex; gap: 8px; align-items: center; }
 .botile small { font-family: var(--f-mono); font-size: 9.5px; color: var(--unit); }
@@ -611,6 +612,13 @@ body { padding: 0 !important; margin: 0; }
               </div>
               <button class="botile" id="boTile" title="Blackout cue: channel 10, note C3"></button>
             </div>
+            <div class="opt" id="fillRow"><span class="t">Hits &amp; rolls before the drop<small id="fillNext">read from the waveform</small></span>
+              <div class="well segbtn" role="group" aria-label="Hits and rolls" id="fillMode">
+                <button data-on="0">Off</button><button data-on="1">Flash &amp; strobe</button>
+              </div>
+              <button class="botile" id="fillHit" title="Hit cue: channel 10, note C#3. Map it to a flash or bump."></button>
+              <button class="botile" id="fillRoll" title="Roll cue: channel 10, note D3. Map it to a strobe."></button>
+            </div>
           </div>
           <div class="pick-opts">
             <div class="well segbtn" role="group" aria-label="How to pick" id="pickMode">
@@ -808,6 +816,7 @@ body { padding: 0 !important; margin: 0; }
     { id: "phrase", name: "8 bars", note: 39, c: "--label" }, { id: "bar", name: "Bar", note: 40, c: "--unit" },
     { id: "new_track", name: "New track", note: 46, c: "--ivory" },
     { id: "blackout", name: "Blackout", note: 60, c: "--unit" },
+    { id: "fill_hit", name: "Fill hit", note: 61, c: "--brass" }, { id: "fill_roll", name: "Roll", note: 62, c: "--brass" },
   ];
   const byId = Object.fromEntries(CUES.map(c => [c.id, c]));
   // In songs (pop, hip hop) a chorus plays the drop looks but is shown as a chorus.
@@ -1157,6 +1166,14 @@ body { padding: 0 !important; margin: 0; }
     $("boBeats").querySelectorAll("button").forEach(x => { x.setAttribute("aria-pressed", String(+x.dataset.b === bo.beats && bo.mode === "fixed")); x.disabled = bo.mode !== "fixed"; });
     $("boTile").classList.toggle("mapped", bo.learned);
     setHTML($("boTile"), `${bo.learned ? '<span class="unmap" title="Unmap">✕</span>' : ""}Blackout cue <small>CH ${bo.channel} · ${noteName(bo.note)}</small>${bo.learned ? '<span class="ok">✓</span>' : ""}`);
+    const fl = S.pools.fills;
+    $("fillRow").hidden = selPool !== "drop";
+    $("fillMode").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String((x.dataset.on === "1") === fl.on)));
+    setHTML($("fillNext"), fl.next || "read from the waveform");
+    for (const [id, cue, label] of [["fillHit", fl.hit, "Hit cue"], ["fillRoll", fl.roll, "Roll cue"]]) {
+      $(id).classList.toggle("mapped", cue.learned);
+      setHTML($(id), `${cue.learned ? '<span class="unmap" title="Unmap">✕</span>' : ""}${label} <small>CH ${fl.channel} · ${noteName(cue.note)}</small>${cue.learned ? '<span class="ok">✓</span>' : ""}`);
+    }
     $("pairSw").setAttribute("aria-checked", String(S.pools.pair));
   }
   $("poolList").addEventListener("click", async e => {
@@ -1184,7 +1201,7 @@ body { padding: 0 !important; margin: 0; }
   });
   $("learnSw").addEventListener("click", () => {
     learnOn = !learnOn; $("learnSw").setAttribute("aria-checked", String(learnOn));
-    $("learnBar").classList.toggle("on", learnOn); $("tiles").classList.toggle("learning-on", learnOn); $("boRow").classList.toggle("learning-on-bo", learnOn);
+    $("learnBar").classList.toggle("on", learnOn); $("tiles").classList.toggle("learning-on", learnOn); $("boRow").classList.toggle("learning-on-bo", learnOn); $("fillRow").classList.toggle("learning-on-bo", learnOn);
     $("learnTxt").innerHTML = learnOn ? "<b>Learn is on.</b> In Lightkey, start MIDI Learn on a sequence (its External Control), then click its tile here. It gets a ✓ once sent. Click ✕ on a tile to unmap it." :
       "To connect these to Lightkey, switch on <b>Learn</b>, put a sequence into MIDI Learn in Lightkey, then click the matching tile here.";
   });
@@ -1202,6 +1219,15 @@ body { padding: 0 !important; margin: 0; }
     else await act("send_blackout", { learn: learnOn });
     poll(true);
   });
+  $("fillMode").addEventListener("click", async e => { const b = e.target.closest("button"); if (!b) return;
+    S.pools.fills.on = b.dataset.on === "1"; renderSeq();
+    await act("set_fills", { on: S.pools.fills.on }); poll(true); });
+  for (const [id, cue, name] of [["fillHit", "fill_hit", "Hit"], ["fillRoll", "fill_roll", "Roll"]])
+    $(id).addEventListener("click", async e => {
+      if (e.target.closest(".unmap")) { await act("unmap", { pool: cue, seq: 1 }); toast(`Unmapped the ${name} cue. Also clear it in Lightkey.`); }
+      else await act("send_fill", { cue, learn: learnOn });
+      poll(true);
+    });
   $("pickMode").addEventListener("click", async e => { const b = e.target.closest("button"); if (!b) return; await act("set_pick_mode", { mode: b.dataset.m }); poll(true); });
   $("pairSw").addEventListener("click", async () => { await act("set_pairing", { on: !S.pools.pair }); poll(true); });
   $("seqBtn").addEventListener("click", () => { $("seqSheet").hidden = false; renderSeq(); });

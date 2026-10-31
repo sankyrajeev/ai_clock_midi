@@ -16,7 +16,7 @@ Waveform formats (150 entries per second), per crate-digger's ANLZ analysis:
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -249,6 +249,22 @@ def _build_start(high: np.ndarray) -> Optional[int]:
     return near if abs(near - best) <= 1 and near < n else best
 
 
+def _seconds_at(grid: list[GridBeat], bpm: float, beat: float) -> float:
+    """Seconds into the track at a (fractional) 1-based beat."""
+    i = int(beat) - 1
+    if grid and 0 <= i < len(grid) - 1:
+        a, b = grid[i].time_ms, grid[i + 1].time_ms
+        return (a + (beat - int(beat)) * (b - a)) / 1000
+    return (beat - 1) * 60 / (bpm or 120)
+
+
+def _entries(grid: list[GridBeat], bpm: float, b0: float, b1: float, n: int) -> tuple[int, int]:
+    lo = int(_seconds_at(grid, bpm, b0) * ENTRIES_PER_SECOND)
+    hi = int(_seconds_at(grid, bpm, b1) * ENTRIES_PER_SECOND)
+    lo, hi = max(0, lo), min(n, max(hi, lo + 1))
+    return lo, hi
+
+
 def gap_before(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
                max_beats: float = 8.0, quiet: float = 0.3) -> float:
     """How many beats of near-silence come right before `drop_beat` (in half beats,
@@ -258,16 +274,8 @@ def gap_before(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
     if not len(level) or drop_beat < 3:
         return 0.0
 
-    def at(beat: float) -> float:  # seconds at a (fractional) 1-based beat
-        i = int(beat) - 1
-        if grid and 0 <= i < len(grid) - 1:
-            a, b = grid[i].time_ms, grid[i + 1].time_ms
-            return (a + (beat - int(beat)) * (b - a)) / 1000
-        return (beat - 1) * 60 / (bpm or 120)
-
     def mean(b0: float, b1: float) -> float:
-        lo, hi = int(at(b0) * ENTRIES_PER_SECOND), int(at(b1) * ENTRIES_PER_SECOND)
-        lo, hi = max(0, lo), min(len(level), max(hi, lo + 1))
+        lo, hi = _entries(grid, bpm, b0, b1, len(level))
         return float(level[lo:hi].mean()) if hi > lo else 0.0
 
     gap = 0.0
@@ -278,3 +286,153 @@ def gap_before(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
             break
         gap += 0.5
     return gap
+
+
+# --------------------------------------------------------------------------
+# The bars right before a drop: silence, synth stabs, a snare roll, a riser
+# --------------------------------------------------------------------------
+
+FILL_BARS = 4  # how far back from the drop to look
+SILENCE, HITS, ROLL, RISER, GROOVE = "silence", "hits", "roll", "riser", "groove"
+
+
+@dataclass
+class DropFill:
+    """What the waveform shows in the bars before one drop."""
+    bars: list[str]                 # each bar's kind, oldest first (GROOVE = the normal beat)
+    hits: list[float] = field(default_factory=list)  # track beats (fractional) of each hit to flash on
+    roll_start: Optional[float] = None               # first beat of a roll, for a strobe
+    per_beat: float = 0.0           # fastest hits per beat in the fill (a 1/16 roll is 4)
+
+    @property
+    def kind(self) -> str:
+        """The bar right before the drop."""
+        return self.bars[-1] if self.bars else GROOVE
+
+    def describe(self) -> str:
+        if self.kind == GROOVE:
+            return "no fill"
+        if self.kind == ROLL:
+            return f"roll, {len(self.hits)} hits" + (f" ({self.per_beat:g} per beat)" if self.per_beat else "")
+        if self.kind == HITS:
+            return f"{len(self.hits)} hit{'s' if len(self.hits) != 1 else ''}"
+        return {SILENCE: "silence", RISER: "riser"}[self.kind]
+
+
+def _onsets(env: np.ndarray, floor: float, min_gap: int) -> list[int]:
+    """Entries where `env` jumps up by at least `floor` (a hit), at least `min_gap` apart."""
+    if len(env) < 4:
+        return []
+    rise = np.zeros(len(env))
+    for i in range(1, len(env)):
+        rise[i] = env[i] - env[max(0, i - 4):i].min()
+    picked: list[int] = []
+    for i in np.argsort(-rise, kind="stable"):
+        if rise[i] < floor:
+            break
+        if all(abs(int(i) - j) >= min_gap for j in picked):
+            picked.append(int(i))
+    return sorted(picked)
+
+
+def drop_fill(bands: Bands, grid: list[GridBeat], drop_beat: int, bpm: float,
+              bars: int = FILL_BARS) -> DropFill:
+    """Read the last `bars` bars before `drop_beat` and sort each into silence, hits
+    (separate stabs), a roll (8+ fast hits), a riser (rising sound with no hits) or
+    the normal groove. Hits are measured on the mids and highs, so the kick
+    doesn't count; a bar whose hits match the drop's own pattern, with the kick
+    still in, is the normal groove."""
+    low = bands.low.astype(float)
+    hi_env = bands.mid.astype(float) + bands.high
+    level = low + hi_env
+    n = len(level)
+    if not n or drop_beat <= 4:
+        return DropFill([])
+    sixteenth = 60.0 / (bpm or 120) / 4
+    min_gap = max(2, int(sixteenth * ENTRIES_PER_SECOND * 0.7))
+
+    # The drop itself is the reference: how loud the music is, how hard it hits,
+    # and its groove pattern.
+    def beat_peaks(arr: np.ndarray, b0: float, beats: int) -> np.ndarray:
+        out = []
+        for b in range(beats):
+            lo, hi = _entries(grid, bpm, b0 + b, b0 + b + 1, n)
+            out.append(float(arr[lo:hi].max()) if hi > lo else 0.0)
+        return np.array(out)
+
+    if _entries(grid, bpm, drop_beat, drop_beat + 8, n)[1] >= n - 1:
+        return DropFill([])
+    ref_level = float(np.median(beat_peaks(level, drop_beat, 8))) or 1.0
+    ref_hit = float(np.median(beat_peaks(hi_env, drop_beat, 8))) or 1.0
+    ref_low = float(np.median(beat_peaks(low, drop_beat, 8))) or 1.0
+
+    def bar_hits(b0: float) -> list[float]:
+        lo, hi = _entries(grid, bpm, b0, b0 + 4, n)
+        lo2 = max(0, lo - 4)  # a little before the bar, so a hit right on beat 1 shows as a rise
+        env = hi_env[lo2:hi]
+        floor = max(0.3 * ref_hit, 0.45 * float(env.max()) if len(env) else 0.0)
+        start = _seconds_at(grid, bpm, b0)
+        beats = set()
+        onsets = _onsets(env, floor, min_gap)
+        beat_entries = int(4 * sixteenth * ENTRIES_PER_SECOND)
+        for j, i in enumerate(onsets):
+            # A hit dies away again; a sound that rises and stays is a riser, not a hit.
+            end = min(onsets[j + 1] if j + 1 < len(onsets) else len(env), i + beat_entries)
+            if end > i + 3 and env[i + 3:end].min() > 0.4 * env[i:i + 3].max():
+                continue
+            q = round((lo2 + i) / ENTRIES_PER_SECOND - start, 6) / sixteenth
+            q = round(q) / 4  # on the 1/16 grid, in beats from the bar's start
+            if 0 <= q < 4:
+                beats.add(b0 + q)
+        return sorted(beats)
+
+    def pattern(b0: float, hits: list[float]) -> set[int]:
+        return {int(round((h - b0) * 4)) % 16 for h in hits}
+
+    drop_bars = [bar_hits(drop_beat + 4 * k) for k in (0, 1)]
+    groove = [pattern(drop_beat + 4 * k, h) for k, h in enumerate(drop_bars)]
+    groove_hits = max(len(h) for h in drop_bars)
+
+    kinds, hits_by_bar = [], []
+    for k in range(bars, 0, -1):
+        b0 = drop_beat - 4 * k
+        if b0 < 1:
+            continue
+        hits = bar_hits(b0)
+        lo, hi = _entries(grid, bpm, b0, b0 + 4, n)
+        loudest = float(np.percentile(level[lo:hi], 95))
+        kick = float(np.median(beat_peaks(low, b0, 4))) >= 0.5 * ref_low
+        pat = pattern(b0, hits)
+        same = max((len(pat & g) / len(pat | g) for g in groove if pat | g), default=0.0)
+        if loudest < 0.2 * ref_level:
+            kind = SILENCE
+        elif kick and same >= 0.6 and len(hits) <= groove_hits + 1:
+            kind = GROOVE
+        elif len(hits) >= 8:
+            kind = ROLL
+        elif hits:
+            kind = HITS
+        elif float(hi_env[lo:hi].mean()) >= 0.25 * ref_hit:  # sound, but nothing hits
+            kind = RISER
+        else:
+            kind = GROOVE
+        kinds.append(kind)
+        hits_by_bar.append((b0, hits))
+
+    fill = DropFill(kinds)
+    # The fill is the run of silent, hit or roll bars that ends at the drop (a
+    # build's riser before it isn't part of it).
+    run = 0
+    while run < len(kinds) and kinds[-1 - run] in (SILENCE, HITS, ROLL):
+        run += 1
+    for (b0, hits), kind in list(zip(hits_by_bar, kinds))[len(kinds) - run:]:
+        if kind in (HITS, ROLL):
+            fill.hits.extend(hits)
+        if kind == ROLL and fill.roll_start is None:
+            fill.roll_start = b0
+    if fill.hits:
+        per_beat = {}
+        for h in fill.hits:
+            per_beat[int(h)] = per_beat.get(int(h), 0) + 1
+        fill.per_beat = float(max(per_beat.values()))
+    return fill

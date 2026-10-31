@@ -171,6 +171,13 @@ Settings are stored in the active project (above); the format is:
   `music` (`waveform.gap_before`: half beats before the drop whose level is
   under 30 % of the 8 beats before them, up to 2 bars). Sent as channel 10,
   note 60.
+- `fills` (true/false): `waveform.drop_fill` classifies each of the 4 bars
+  before a drop from the mid+high band: silence (95th percentile under 20 % of
+  the drop's beat peaks), the groove (kick in and the same 1/16 hit pattern as
+  the drop's first bars), a roll (8+ hits), hits (rises that decay again), or a
+  riser (sound with no hits). Hits are snapped to the 1/16 grid and sent on time
+  (timers within the beat): channel 10 note 61 per hit, note 62 when a roll
+  starts, CC 24 = hits in the beat / 8.
 
 ## Phrase cues over the network (recommended)
 

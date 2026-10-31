@@ -45,6 +45,11 @@ CC_ENERGY, CC_BUILD = 20, 23
 # Blackout before a drop: its own channel and a note no other cue uses.
 BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE = "blackout", 10, 60
 AGAIN = "again:"  # prefix: the next look from the same pool, mid-section
+# Fills before a drop, read from the waveform: a short note on every hit (map it to
+# a flash or bump) and one when a roll starts (map it to a strobe). CC 24 is the
+# roll's speed: hits per beat / 8.
+FILL_HIT, FILL_ROLL = "fill_hit", "fill_roll"
+FILL_HIT_NOTE, FILL_ROLL_NOTE, CC_FILL = 61, 62, 24
 
 # How "big" each kind of section is, sent as CC 20 so one fader mapping can
 # follow the energy of the track.
@@ -500,6 +505,8 @@ class PhraseTracker:
         # how many beats to black out before a drop (track key, drop beat) -> beats.
         self.change_every: Callable[[str], int] = lambda cue: 0
         self.blackout_beats: Callable[[tuple, int], float] = lambda key, beat: 0.0
+        # The fill before a drop (waveform.DropFill), or None: (track key, drop beat) -> fill
+        self.drop_fill: Callable[[tuple, int], object] = lambda key, beat: None
 
     # -- inputs -------------------------------------------------------------
 
@@ -685,6 +692,7 @@ class PhraseTracker:
             if nxt.beat - beat == 4:
                 self.emit(PRE_DROP)
             self._maybe_blackout(device, key, beat, nxt.beat)
+            self._maybe_fill(device, key, beat, nxt.beat)
         if phrase.cue == BUILD:
             end = nxt.beat if nxt else tp.end_beat
             self.level(CC_BUILD, (beat - phrase.beat) / max(1, end - phrase.beat))
@@ -702,16 +710,40 @@ class PhraseTracker:
             self.emit(BLACKOUT)
             return
         bpm = self.decks[device].bpm or 120
-        timer = threading.Timer(frac * 60 / bpm, self._blackout_later, (device, beat))
+        self._emit_later(frac * 60 / bpm, device, beat, BLACKOUT)
+
+    def _maybe_fill(self, device: int, key: tuple, beat: int, drop_beat: int) -> None:
+        """Flash on each hit of the fill before the drop, and start the strobe on a roll."""
+        if drop_beat - beat > 16:
+            return
+        fill = self.drop_fill(key, drop_beat)
+        if not fill or not fill.hits:
+            return
+        if fill.roll_start is not None and beat == int(fill.roll_start):
+            self.emit(FILL_ROLL)
+        hits = [h for h in fill.hits if beat <= h < beat + 1]
+        if fill.roll_start is not None and beat >= fill.roll_start:
+            self.level(CC_FILL, len(hits) / 8)
+        beat_len = 60.0 / (self.decks[device].bpm or 120)
+        for h in hits:
+            delay = (h - beat) * beat_len
+            if delay < 0.005:
+                self.emit(FILL_HIT)
+            else:
+                self._emit_later(delay, device, beat, FILL_HIT)
+
+    def _emit_later(self, delay: float, device: int, beat: int, cue: str) -> None:
+        """Send `cue` part-way through `beat`, unless the deck has moved on meanwhile."""
+        timer = threading.Timer(delay, self._emit_if_still, (device, beat, cue))
         timer.daemon = True
-        self.timers.append(timer)
+        self.timers = [t for t in self.timers if t.is_alive()] + [timer]
         timer.start()
 
-    def _blackout_later(self, device: int, beat: int) -> None:
+    def _emit_if_still(self, device: int, beat: int, cue: str) -> None:
         with self.lock:
             deck = self.decks.get(device)
             if device == self.followed and deck and deck.beat is not None and abs(deck.beat - beat) <= 1:
-                self.emit(BLACKOUT)
+                self.emit(cue)
 
     def _announce(self, tp: TrackPhrases, idx: int, beat: int) -> None:
         phrase = tp.phrases[idx]
@@ -1094,6 +1126,10 @@ class CueMidi:
 
     def blackout(self) -> None:
         self.note(BLACKOUT_CHANNEL, BLACKOUT_NOTE)
+
+    def fill(self, cue: str) -> None:
+        """A hit or the start of a roll in the fill before a drop (channel 10)."""
+        self.note(BLACKOUT_CHANNEL, FILL_HIT_NOTE if cue == FILL_HIT else FILL_ROLL_NOTE)
 
     def event(self, name: str, section_note: bool = True) -> Optional[tuple[int, int]]:
         """Send a section cue; returns (sequence, pool size) when a pool sequence was picked.

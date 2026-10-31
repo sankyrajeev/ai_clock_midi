@@ -140,3 +140,91 @@ def test_virtual_cdj_falls_back_to_waveform_when_no_phrases():
     finally:
         vcdj.close()
         out.close()
+
+
+# --- what happens right before a drop --------------------------------------
+
+def fill_track(last_bars, bpm=128.0, beats=96, drop=65, seed=3):
+    """A groove (kick on every beat, claps on 2 and 4, off-beat hats) with a drop at
+    `drop`; `last_bars` maps a bar's first beat to what plays there instead."""
+    rng = np.random.default_rng(seed)
+    n = int((beats + 1) * 60 / bpm * wf.ENTRIES_PER_SECOND)
+    low, mid, high = (rng.uniform(0, 3, n) for _ in range(3))
+
+    def hit(band, beat, amp, decay=0.6):
+        i = int((beat - 1) * 60 / bpm * wf.ENTRIES_PER_SECOND)
+        for k in range(12):
+            if i + k < n:
+                band[i + k] = max(band[i + k], amp * decay ** k)
+
+    replaced = {b + j for b in last_bars for j in range(4)}
+    beat_len = 60 / bpm * wf.ENTRIES_PER_SECOND
+    for b in range(1, beats + 1):  # bass and pads under everything except a silent bar
+        if b not in replaced or last_bars[max(k for k in last_bars if k <= b)] != "silence":
+            i = int((b - 1) * beat_len)
+            low[i:i + int(beat_len) + 1] += 30
+            mid[i:i + int(beat_len) + 1] += 25
+    for b in range(1, beats + 1):
+        if b in replaced:
+            continue
+        loud = 1.0 if b >= drop else 0.8
+        hit(low, b, 220 * loud)
+        hit(high, b + 0.5, 120 * loud)
+        if (b - 1) % 4 in (1, 3):
+            hit(mid, b, 160 * loud)
+    for b0, what in last_bars.items():
+        if what == "stabs":
+            for j in range(4):
+                hit(mid, b0 + j, 200, decay=0.75)
+        elif what in ("roll16", "roll8"):
+            step = 0.25 if what == "roll16" else 0.5
+            for j in range(int(4 / step)):
+                hit(mid, b0 + j * step, 150)
+                hit(high, b0 + j * step, 90)
+            for j in range(4):
+                hit(low, b0 + j, 200)  # the kick keeps going under the roll
+        elif what == "riser":
+            i0 = int((b0 - 1) * 60 / bpm * wf.ENTRIES_PER_SECOND)
+            i1 = int((b0 + 3) * 60 / bpm * wf.ENTRIES_PER_SECOND)
+            high[i0:i1] = np.linspace(40, 140, i1 - i0) + rng.uniform(0, 4, i1 - i0)
+    bands = wf.Bands(low=low, mid=mid, high=high, kind="PWV7")
+    grid = wf.parse_beat_grid(wf.build_beat_grid(bpm, beats + 1))
+    return wf.drop_fill(bands, grid, drop, bpm)
+
+
+def test_normal_groove_before_the_drop_is_left_alone():
+    fill = fill_track({})
+    assert fill.kind == wf.GROOVE and fill.hits == [] and fill.describe() == "no fill"
+
+
+def test_silent_bar_before_the_drop():
+    assert fill_track({61: "silence"}).kind == wf.SILENCE
+
+
+def test_four_synth_stabs_land_on_their_beats():
+    fill = fill_track({61: "stabs"})
+    assert fill.kind == wf.HITS
+    assert fill.hits == [61.0, 62.0, 63.0, 64.0]
+    assert fill.describe() == "4 hits"
+
+
+def test_snare_roll_with_the_kick_still_in():
+    fill = fill_track({61: "roll16"})
+    assert fill.kind == wf.ROLL and fill.roll_start == 61
+    assert len(fill.hits) == 16 and fill.hits[:3] == [61.0, 61.25, 61.5]
+    assert fill.per_beat == 4
+
+
+def test_roll_that_speeds_up_over_two_bars():
+    fill = fill_track({57: "roll8", 61: "roll16"})
+    assert fill.bars[-2:] == [wf.ROLL, wf.ROLL]
+    assert fill.roll_start == 57 and len(fill.hits) == 8 + 16
+
+
+def test_riser_without_hits():
+    assert fill_track({61: "riser"}).kind == wf.RISER
+
+
+def test_stabs_after_a_silent_bar_make_one_fill():
+    fill = fill_track({57: "silence", 61: "stabs"})
+    assert fill.bars[-2:] == [wf.SILENCE, wf.HITS] and fill.hits == [61.0, 62.0, 63.0, 64.0]

@@ -26,7 +26,8 @@ import numpy as np
 import pools as pl
 import prolink_sync as ps
 import waveform as wf
-from phrases import AGAIN, BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE, CueMidi, PhraseTracker, VirtualCdj
+from phrases import (AGAIN, BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE, FILL_HIT, FILL_HIT_NOTE, FILL_ROLL,
+                     FILL_ROLL_NOTE, CueMidi, PhraseTracker, VirtualCdj)
 from projects import NAME_TIP, ProjectManager, ProjectStore
 
 log = logging.getLogger("prolink_sync.app")
@@ -157,7 +158,10 @@ class LumiereEngine:
                                      lead=self.settings.latency_ms / 1000.0)
         self.tracker.change_every = self._change_every
         self.tracker.blackout_beats = self._blackout_beats
+        self.tracker.drop_fill = self._drop_fill
         self._gaps: dict = {}
+        self._fills: dict = {}
+        self._fill_logged = -1e9
         broadcast = None
         if self.settings.demo:
             from simrig import SimRig
@@ -270,6 +274,16 @@ class LumiereEngine:
         if cue == BLACKOUT:
             self.cue_out.blackout()
             self._record(cue, self._where() + " · before the drop")
+        elif cue in (FILL_HIT, FILL_ROLL):
+            self.cue_out.fill(cue)
+            # One log line per fill, not one per hit (a roll can be 16+ hits).
+            if cue == FILL_ROLL or time.monotonic() - self._fill_logged > 4.0:
+                self._record(cue, self._where() + " · before the drop")
+            else:
+                with self.lock:
+                    self._next_id += 1
+                    self.flashes.append((self._next_id, cue))
+            self._fill_logged = time.monotonic()
         elif cue.startswith(AGAIN):
             name = cue[len(AGAIN):]
             pick = self.cue_out.event(name, section_note=False)
@@ -303,6 +317,38 @@ class LumiereEngine:
             self._gaps[(key, drop_beat)] = wf.gap_before(bands, grid, drop_beat, bpm)
             log.info("Gap before the drop at beat %d: %.1f beats", drop_beat, self._gaps[(key, drop_beat)])
         return self._gaps[(key, drop_beat)]
+
+    def _drop_fill(self, key: tuple, drop_beat: int):
+        if not self.manager.project.config.get("fills", True) or not self.tracker:
+            return None
+        if (key, drop_beat) not in self._fills:
+            bands = self.tracker.waveforms.get(key)
+            if bands is None:
+                return None  # no waveform yet: ask again next beat
+            grid = self.tracker.grids.get(key, [])
+            bpm = grid[0].bpm if grid else 120.0
+            fill = wf.drop_fill(bands, grid, drop_beat, bpm)
+            self._fills[(key, drop_beat)] = fill
+            log.info("Before the drop at beat %d: %s (bars: %s)", drop_beat, fill.describe(), ", ".join(fill.bars))
+        return self._fills[(key, drop_beat)]
+
+    def _next_fill(self) -> str:
+        """What's before the next drop on the deck the lights follow, for the screen."""
+        t = self.tracker
+        if not t:
+            return ""
+        with t.lock:
+            deck = t.decks.get(t.followed) if t.followed else None
+            tp = t._followed_phrases()
+            if not deck or not tp or deck.beat is None:
+                return ""
+            key = deck.status.track_key
+            drop = next((p.beat for i, p in enumerate(tp.phrases)
+                         if p.cue == "drop" and p.beat > deck.beat and i and tp.phrases[i - 1].cue != "drop"), None)
+        if drop is None or key not in t.waveforms:
+            return ""
+        fill = self._drop_fill(key, drop)
+        return f"Next drop (bar {(drop - 1) // 4 + 1}): {fill.describe()}" if fill else ""
 
     def _level(self, cc: int, value: float) -> None:
         if self.live and self.settings.phrases and self.cue_out:
@@ -404,6 +450,8 @@ class LumiereEngine:
         """A pad pressed by hand: sends even while paused."""
         if cue == BLACKOUT:
             return self.do_send_blackout()
+        if cue in (FILL_HIT, FILL_ROLL):
+            return self.do_send_fill(cue)
         if self.cue_out:
             pick = self.cue_out.event(cue)
             self._record(cue, "by hand", pick)
@@ -426,6 +474,18 @@ class LumiereEngine:
             self.manager.mark_learned(BLACKOUT, 1)
         self._record(BLACKOUT, "for MIDI Learn" if learn else "by hand")
 
+    def do_send_fill(self, cue: str, learn: bool = False) -> None:
+        if cue not in (FILL_HIT, FILL_ROLL):
+            raise ValueError("no such cue")
+        if self.cue_out:
+            self.cue_out.fill(cue)
+        if learn:
+            self.manager.mark_learned(cue, 1)
+        self._record(cue, "for MIDI Learn" if learn else "by hand")
+
+    def do_set_fills(self, on: bool) -> None:
+        self._update_config(lambda cfg: cfg.__setitem__("fills", bool(on)))
+
     def do_set_change_every(self, pool: str, bars: int) -> None:
         if pool not in pl.POOL_CHANNELS or int(bars) not in pl.CHANGE_EVERY:
             raise ValueError("choose 0, 4, 8, 16 or 32 bars")
@@ -447,9 +507,9 @@ class LumiereEngine:
 
     def do_unmap(self, pool: str, seq: int) -> None:
         """Clear a sequence's MAPPED mark (Lightkey's own mapping is cleared in Lightkey)."""
-        if pool == BLACKOUT:
-            self.manager.unmark_learned(BLACKOUT, 1)
-            self._record(BLACKOUT, "unmapped")
+        if pool in (BLACKOUT, FILL_HIT, FILL_ROLL):
+            self.manager.unmark_learned(pool, 1)
+            self._record(pool, "unmapped")
             return
         if pool not in pl.POOL_CHANNELS:
             raise ValueError("no such pool")
@@ -570,7 +630,11 @@ class LumiereEngine:
                       "pools": pools_state,
                       "blackout": {**{"mode": "off", "beats": 1.0}, **(project.config.get("blackout") or {}),
                                    "learned": 1 in project.learned.get(BLACKOUT, []),
-                                   "channel": BLACKOUT_CHANNEL, "note": BLACKOUT_NOTE}},
+                                   "channel": BLACKOUT_CHANNEL, "note": BLACKOUT_NOTE},
+                      "fills": {"on": bool(project.config.get("fills", True)), "channel": BLACKOUT_CHANNEL,
+                                "hit": {"note": FILL_HIT_NOTE, "learned": 1 in project.learned.get(FILL_HIT, [])},
+                                "roll": {"note": FILL_ROLL_NOTE, "learned": 1 in project.learned.get(FILL_ROLL, [])},
+                                "next": self._next_fill()}},
             "log": log_entries,
             "flashes": flashes,
             "ports": {"clock": CLOCK_PORT, "cues": CUE_PORT, "ok": "midi" not in self.errors},
