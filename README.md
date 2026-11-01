@@ -242,6 +242,8 @@ picks a sequence that doesn't exist, and nothing happens on that drop.
 
 ### 6.5 Connect each sequence to Lightkey (MIDI Learn)
 
+> Everything you can map, step by step, is in **[MAPPING.md](MAPPING.md)**.
+
 Lightkey needs to know which MIDI message starts which sequence. In the same
 **Sequences** screen:
 
