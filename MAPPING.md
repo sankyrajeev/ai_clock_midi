@@ -141,9 +141,20 @@ To map one:
 2. In Lumière Link, with **Learn** on, click **Speed fader** (or **Intensity
    fader**). It sweeps the fader up and back down, and Lightkey learns it.
 
-Both faders drop back to zero the moment the drop lands. The line under
-**Follow the build** shows what the current or next build does, e.g.
-"Next build (bar 9): roll 1/8 from bar 5, 1/16 from bar 7".
+**Set how far each fader goes (Fader ranges).** Under the two buttons, each
+fader has three settings, sent to Lightkey the moment you press **–** or **+**
+so you can set them by eye:
+
+| Setting | What it is | Example (Speed fader on the Beat Multiplier) |
+|---|---|---|
+| **Lowest** | where the fader sits with no roll (or a quiet riser) | press until Lightkey shows **×2** |
+| **Highest** | where the fastest roll (or loudest riser) takes it | press until it shows the fastest you want |
+| **At the drop** | where it goes when the build ends, so every drop sequence plays at this speed | your normal drop speed, e.g. **×2** or **×4** |
+
+They start at 50 % / 100 % / 50 %, never at zero: a fader at zero puts
+Lightkey's Beat Multiplier at its slowest, and the lights look frozen. The
+line under **Follow the build** shows what the current or next build does,
+e.g. "Next build (bar 9): roll 1/8 from bar 5, 1/16 from bar 7".
 
 ---
 
@@ -168,6 +179,7 @@ Both faders drop back to zero the moment the drop lands. The line under
 | A drop happens but the look doesn't change | The sequence it picked isn't mapped, or the pool count is higher than the sequences you made. Set the count right and map the missing tiles. |
 | A drop sequence plays on a breakdown | Lightkey matched the note but not the channel. Re-learn that sequence and check the channel shows in Lightkey's External Control. Tell me if it keeps happening. |
 | Lightkey's BPM doesn't move | Tempo source must be **MIDI Clock** with input **Lumiere Clock**. |
+| Lights slow right down or freeze during or after a build | Raise **Lowest** and **At the drop** under Fader ranges (Build page) until Lightkey shows the slowest speed you want, e.g. ×2. |
 | Hits or the build faders never fire | They need the track's waveform from the CDJ. Check the row is switched on, and look at the line under it: it should describe the next drop or build. |
 
 ---

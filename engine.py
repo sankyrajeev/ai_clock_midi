@@ -27,9 +27,14 @@ import pools as pl
 import prolink_sync as ps
 import waveform as wf
 from phrases import (AGAIN, BLACKOUT, BLACKOUT_CHANNEL, BLACKOUT_NOTE, BUILD, CC_BUILD_INTENSITY, CC_BUILD_SPEED,
-                     DROP, FILL_HIT, FILL_HIT_NOTE, FILL_ROLL, FILL_ROLL_NOTE, CueMidi, PhraseTracker, VirtualCdj)
+                     DROP, FADER_REST, FILL_HIT, FILL_HIT_NOTE, FILL_ROLL, FILL_ROLL_NOTE, CueMidi, PhraseTracker,
+                     VirtualCdj)
 
 BUILD_FADERS = {"build_speed": CC_BUILD_SPEED, "build_intensity": CC_BUILD_INTENSITY}
+# Where each build fader may go, in MIDI values 0-127: no roll / a quiet riser sits at
+# "low", the fastest roll / loudest riser reaches "high", and once the build is over
+# (the drop) it goes to "drop". Never 0 by default: Lightkey's slowest speed freezes the lights.
+FADER_RANGE = {"low": 64, "high": 127, "drop": 64}
 from projects import NAME_TIP, ProjectManager, ProjectStore
 
 log = logging.getLogger("prolink_sync.app")
@@ -393,9 +398,17 @@ class LumiereEngine:
         fill = self._drop_fill(key, drop)
         return f"Next drop (bar {(drop - 1) // 4 + 1}): {fill.describe()}" if fill else ""
 
+    def fader_range(self, fader: str) -> dict:
+        return {**FADER_RANGE, **((self.manager.project.config.get("build_ranges") or {}).get(fader) or {})}
+
     def _level(self, cc: int, value: float) -> None:
-        if self.live and self.settings.phrases and self.cue_out:
-            self.cue_out.level(cc, value)
+        if not (self.live and self.settings.phrases and self.cue_out):
+            return
+        fader = next((name for name, c in BUILD_FADERS.items() if c == cc), None)
+        if fader:
+            r = self.fader_range(fader)
+            value = (r["drop"] if value == FADER_REST else r["low"] + value * (r["high"] - r["low"])) / 127
+        self.cue_out.level(cc, value)
 
     def _audio_event(self, cue: str, _t: float = 0.0) -> None:
         if not self._has_phrases():
@@ -532,16 +545,34 @@ class LumiereEngine:
         if cc is None:
             raise ValueError("no such fader")
         if self.cue_out:
-            out = self.cue_out
+            out, r = self.cue_out, self.fader_range(fader)
 
-            def sweep():
-                for v in (0.25, 0.5, 0.75, 1.0, 0.5, 0.0):
-                    out.level(cc, v)
+            def sweep():  # within the fader's range, ending where it rests
+                for v in (r["low"], (r["low"] + r["high"]) / 2, r["high"], r["drop"]):
+                    out.level(cc, v / 127)
                     time.sleep(0.05)
             threading.Thread(target=sweep, daemon=True).start()
         if learn:
             self.manager.mark_learned(fader, 1)
         self._record(fader, "for MIDI Learn" if learn else "by hand")
+
+    def do_set_build_range(self, fader: str, which: str, value: int) -> None:
+        """Set a build fader's lowest, highest or at-the-drop value (0-127), and send it
+        straight away so Lightkey shows where that lands (e.g. its beat multiplier)."""
+        if fader not in BUILD_FADERS or which not in FADER_RANGE:
+            raise ValueError("no such fader setting")
+        v = max(0, min(127, int(value)))
+
+        def change(cfg):
+            r = cfg.setdefault("build_ranges", {}).setdefault(fader, dict(FADER_RANGE))
+            r[which] = v
+            if which == "low" and r.get("high", 127) < v:
+                r["high"] = v
+            if which == "high" and r.get("low", 0) > v:
+                r["low"] = v
+        self._update_config(change)
+        if self.cue_out:
+            self.cue_out.level(BUILD_FADERS[fader], v / 127)
 
     def do_set_build_fx(self, on: bool) -> None:
         self._update_config(lambda cfg: cfg.__setitem__("build_fx", bool(on)))
@@ -699,7 +730,8 @@ class LumiereEngine:
                                 "roll": {"note": FILL_ROLL_NOTE, "learned": 1 in project.learned.get(FILL_ROLL, [])},
                                 "next": self._next_fill()},
                       "build_fx": {"on": bool(project.config.get("build_fx", True)), "now": self._build_now(),
-                                   **{name: {"cc": cc, "learned": 1 in project.learned.get(name, [])}
+                                   **{name: {"cc": cc, "learned": 1 in project.learned.get(name, []),
+                                             "range": self.fader_range(name)}
                                       for name, cc in BUILD_FADERS.items()}}},
             "log": log_entries,
             "flashes": flashes,

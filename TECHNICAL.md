@@ -190,7 +190,10 @@ Settings are stored in the active project (above); the format is:
   speed, lone single beats are dropped. Sent as CC 25 each beat (0, 25, 50, 75,
   100 %). Riser: mids + highs per quarter beat, smoothed over a beat, scaled
   from the build's 5th to 98th percentile, sent as CC 26 four times a beat (Up
-  sections only). Both go to 0 when the section ends.
+  sections only). When the section ends the tracker sends `FADER_REST`. The
+  app scales both into the project's `build_ranges` (MIDI values: `low` for 0,
+  `high` for 1, `drop` for `FADER_REST`; default 64 / 127 / 64), so they never
+  fall to Lightkey's slowest setting.
 - Scored by `test_build_fx.py` on 200 generated tracks (`buildcorpus.py`: seven
   roll schedules, kick/hats/riser in or out, 118–175 BPM, noise, grid offsets)
   plus 200 harder ones; `analyse_tracks.py` runs the same analysis over the

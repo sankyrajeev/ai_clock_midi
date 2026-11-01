@@ -315,8 +315,12 @@ Lumière Link moves two faders for you, read from the track's waveform:
 | **Intensity fader** (CC 26) | how loud the riser gets, 0–100 % across the build | a dimmer, effect size or brightness |
 
 They move with the music: a build that holds and then doubles its snare makes
-the speed jump at that moment, and a build with no roll leaves it at zero. Both
-drop to zero when the drop lands. To map one, put the Lightkey control you want
+the speed jump at that moment. **Fader ranges** sets where each fader sits
+with no roll (**Lowest**), how far the fastest roll takes it (**Highest**) and
+where it goes when the drop lands (**At the drop**), in 0–100 %. Each press is
+sent straight to Lightkey, so set them while watching it, e.g. Lowest at ×2 on
+a Beat Multiplier. They default to 50 / 100 / 50 %, never zero, which would
+freeze the lights. To map one, put the Lightkey control you want
 into MIDI Learn, switch on **Learn** here and click the fader's button (it
 sweeps the fader up and down). The line under **Follow the build** shows the
 build playing now or the next one.

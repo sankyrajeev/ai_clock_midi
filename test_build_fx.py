@@ -42,9 +42,9 @@ def test_faders_follow_the_build_and_drop_back_at_the_drop():
     rig.tracker.build_curve = lambda key, s, e: curve if (s, e) == (33, 65) else None
     rig.play(1, 66)
     speed = [v for cc, v in rig.levels if cc == ph.CC_BUILD_SPEED]
-    assert 0.5 in speed and 0.75 in speed and speed[-1] == 0.0
+    assert 0.5 in speed and 0.75 in speed and speed[-1] == ph.FADER_REST  # the drop: back to resting
     intensity = [v for cc, v in rig.levels if cc == ph.CC_BUILD_INTENSITY]
-    assert max(intensity) > 0.9 and intensity[-1] == 0.0
+    assert max(intensity) > 0.9 and intensity[-1] == ph.FADER_REST
 
 
 # --- the USB-stick tool -------------------------------------------------------

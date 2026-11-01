@@ -117,3 +117,35 @@ def test_paused_sends_no_automatic_cues_but_pads_still_work(app):
     assert len(ports["Lumiere Cues"].sent) > before
     settings = json.loads((eng.settings_path).read_text())
     assert settings["demo"] is True
+
+
+def test_build_faders_stay_inside_their_range(app):
+    """The speed fader never goes below its lowest point (Lightkey's slowest beat
+    multiplier freezes the lights), and goes to its drop value when the build ends."""
+    eng, srv, ports, _ = app
+    out = ports["Lumiere Cues"].sent
+    ok, _ = call(srv, "/api/action", {"name": "set_build_range",
+                                      "args": {"fader": "build_speed", "which": "low", "value": 72}})
+    assert ok == 200
+    call(srv, "/api/action", {"name": "set_build_range", "args": {"fader": "build_speed", "which": "drop", "value": 90}})
+    sent = lambda: [m.value for m in out if m.type == "control_change" and m.control == ph.CC_BUILD_SPEED]
+    assert sent()[-1] == 90  # each change is sent at once, to set it by eye in Lightkey
+    for v in (0.0, 0.25, 0.5, 0.75, 1.0, ph.FADER_REST, 0.0):
+        eng._level(ph.CC_BUILD_SPEED, v)
+    values = sent()
+    assert min(values) >= 72 and max(values) == 127 and 90 in values
+    state = call(srv, "/api/state")[1]
+    assert state["pools"]["build_fx"]["build_speed"]["range"] == {"low": 72, "high": 127, "drop": 90}
+    call(srv, "/api/action", {"name": "send_build_fader", "args": {"fader": "build_speed"}})
+    assert wait(lambda: sent()[-1] == 90)  # the Learn sweep ends at rest too
+    assert min(sent()) >= 72
+
+
+def test_build_fader_defaults_never_reach_zero(app):
+    eng, srv, ports, _ = app
+    out = ports["Lumiere Cues"].sent
+    for cc in (ph.CC_BUILD_SPEED, ph.CC_BUILD_INTENSITY):
+        for v in (0.0, ph.FADER_REST, 1.0):
+            eng._level(cc, v)
+    values = [m.value for m in out if m.type == "control_change" and m.control in (25, 26)]
+    assert values and min(values) >= 64

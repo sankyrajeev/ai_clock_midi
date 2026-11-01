@@ -53,6 +53,7 @@ FILL_HIT_NOTE, FILL_ROLL_NOTE, CC_FILL = 61, 62, 24
 # Build-ups, read from the waveform: the snare roll's speed (no roll 0, then 1/4,
 # 1/8, 1/16, 1/32 = 25/50/75/100 %) and the riser's level, for effect speed and size.
 CC_BUILD_SPEED, CC_BUILD_INTENSITY = 25, 26
+FADER_REST = -1.0  # a build fader's level meaning "back to its resting value" (the build is over)
 
 # How "big" each kind of section is, sent as CC 20 so one fader mapping can
 # follow the energy of the track.
@@ -714,8 +715,8 @@ class PhraseTracker:
         if curve is None:
             if self._building:
                 self._building = False
-                self.level(CC_BUILD_SPEED, 0.0)
-                self.level(CC_BUILD_INTENSITY, 0.0)
+                self.level(CC_BUILD_SPEED, FADER_REST)
+                self.level(CC_BUILD_INTENSITY, FADER_REST)
             return
         self._building = True
         self.level(CC_BUILD_SPEED, curve.speed(beat))

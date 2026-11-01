@@ -54,6 +54,7 @@ class Project:
             "blackout": self.config.get("blackout", {"mode": "off", "beats": 1.0}),
             "fills": self.config.get("fills", True),
             "build_fx": self.config.get("build_fx", True),
+            "build_ranges": self.config.get("build_ranges", {}),
             "learned": {k: sorted(set(v)) for k, v in self.learned.items() if v},
         }
 
@@ -66,7 +67,8 @@ class Project:
                   "change_every": data.get("change_every", {}),
                   "blackout": data.get("blackout", {"mode": "off", "beats": 1.0}),
                   "fills": data.get("fills", True),
-                  "build_fx": data.get("build_fx", True)}
+                  "build_fx": data.get("build_fx", True),
+                  "build_ranges": data.get("build_ranges", {})}
         learned = {k: [int(n) for n in v] for k, v in (data.get("learned") or {}).items()}
         return cls(data.get("name") or fallback_name, config, learned,
                    lk.get("project_name", ""), lk.get("project_path", ""))
