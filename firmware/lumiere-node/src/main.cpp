@@ -330,10 +330,25 @@ void setupWeb() {
 
 // --- updates over the network --------------------------------------------------------
 // Start Ethernet (again, if an earlier try failed).
+// Is the 50 MHz clock arriving on IO0? Sampled far slower than it ticks, a
+// running clock reads as a mix of highs and lows; a dead one reads all the same.
+bool ethClockRunning() {
+  pinMode(0, INPUT);
+  int highs = 0;
+  for (int i = 0; i < 2000; i++) highs += digitalRead(0);
+  return highs > 20 && highs < 1980;
+}
+
 void startEthernet() {
   pinMode(ETH_CLOCK_ENABLE, OUTPUT);
   digitalWrite(ETH_CLOCK_ENABLE, HIGH);
   delay(50);  // let the clock settle
+  if (!ethClockRunning()) {
+    Serial.println("Ethernet clock: NOT running on IO0. Check that nothing is connected to IO0, "
+                   "and that the board gets a steady 5 V (try a USB charger on 5V/GND).");
+  } else if (!eth_started && eth_retry_at == 0) {
+    Serial.println("Ethernet clock: running");
+  }
   eth_started = ETH.begin(ETH_ADDR, -1, ETH_MDC, ETH_MDIO, ETH_PHY_LAN8720, ETH_CLOCK_GPIO0_IN);
   if (!eth_started) {
     Serial.println("Ethernet didn't start; trying again in 5 s");
