@@ -332,10 +332,16 @@ void setupWeb() {
 // Start Ethernet (again, if an earlier try failed).
 // Is the 50 MHz clock arriving on IO0? Sampled far slower than it ticks, a
 // running clock reads as a mix of highs and lows; a dead one reads all the same.
+// The gap between reads is random, so a steady sampling rhythm can't line up with
+// the clock and read the same phase every time.
 bool ethClockRunning() {
   pinMode(0, INPUT);
   int highs = 0;
-  for (int i = 0; i < 2000; i++) highs += digitalRead(0);
+  for (int i = 0; i < 2000; i++) {
+    highs += (REG_READ(GPIO_IN_REG) & 1);
+    for (volatile uint32_t k = esp_random() & 63; k; k--) {
+    }
+  }
   return highs > 20 && highs < 1980;
 }
 
