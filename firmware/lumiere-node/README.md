@@ -39,6 +39,22 @@ on the desk, with the board **not** wired into the Resident.
 
 TX goes to RX and RX to TX: they cross.
 
+**No adapter? Use any old ESP32 board with a USB socket** as the adapter. Its
+USB chip passes everything through while its own ESP32 is held off:
+
+| Old ESP32 board | WT32-ETH01 |
+|---|---|
+| **EN → a GND pin on the old board itself** | (holds the old chip off) |
+| GND | GND |
+| VIN / 5V (or power the WT32 from elsewhere) | 5V |
+| **TX** | **TX0** (not crossed this time) |
+| **RX** | **RX0** |
+| | **IO0 → GND** for loading |
+
+The old board's EN must go to **its own GND**, never to the WT32's EN: otherwise
+the old chip stays awake, the firmware loads into it instead, and it reports
+Ethernet errors because it has no Ethernet.
+
 **Then, in Terminal on the Mac:**
 
 ```bash
@@ -59,6 +75,17 @@ cd firmware/lumiere-node
 
 To see what it's doing (address, Art-Net, button): `../../.venv/bin/pio device monitor`
 (Ctrl+C to leave).
+
+**Getting into load mode:** IO0 must already be on GND at the moment the board
+restarts. Put the IO0 jumper on first, then tap **EN** to GND (or power it up).
+"Wrong boot mode detected (0x13)" means it restarted without IO0 on GND; tap EN
+again while the upload shows `Connecting....`.
+
+**IO0 must be completely bare when running.** On the WT32-ETH01, IO0 carries the
+Ethernet chip's 50 MHz clock: even a loose wire left on it stops Ethernet
+("emac reset timeout"). For the same reason the debug text on TX0 (right next to
+IO0) can turn to garbage once Ethernet starts; that's the jumper wire picking up
+the clock, not a fault. Use the web page instead.
 
 ## 2. Later updates, over the network
 
