@@ -167,6 +167,11 @@ void dhcpFallback() {
     Serial.println("No DHCP server: using the fixed address");
     ETH.config(settings.ip, settings.gateway, settings.mask);
   }
+  // A fixed address doesn't always announce itself as "got an address": notice it anyway.
+  if (eth_link && !eth_has_ip && (using_fallback || !settings.dhcp) && ETH.localIP() != IPAddress(0, 0, 0, 0)) {
+    eth_has_ip = true;
+    Serial.printf("Network: %s (fixed address)\n", ETH.localIP().toString().c_str());
+  }
 }
 
 // --- Art-Net -------------------------------------------------------------------
