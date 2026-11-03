@@ -351,8 +351,10 @@ void startEthernet() {
   }
   eth_started = ETH.begin(ETH_ADDR, -1, ETH_MDC, ETH_MDIO, ETH_PHY_LAN8720, ETH_CLOCK_GPIO0_IN);
   if (!eth_started) {
-    Serial.println("Ethernet didn't start; trying again in 5 s");
-    eth_retry_at = millis() + 5000;
+    // The Ethernet driver can't be started twice in one run, so the retry is a
+    // full restart (DMX keeps going with the house look until then).
+    Serial.println("Ethernet didn't start; restarting in 10 s to try again");
+    eth_retry_at = millis() + 10000;
   }
 }
 
@@ -394,7 +396,7 @@ void setup() {
 void loop() {
   uint32_t now = millis();
   esp_task_wdt_reset();
-  if (!eth_started && (int32_t)(now - eth_retry_at) >= 0) startEthernet();
+  if (!eth_started && (int32_t)(now - eth_retry_at) >= 0) ESP.restart();
   // Art-Net, the web page and updates start once the network is up (they need it).
   if (eth_has_ip && !services_started) {
     services_started = true;
