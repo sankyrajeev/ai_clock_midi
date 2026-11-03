@@ -30,8 +30,11 @@ constexpr int PIN_DMX_DE = 33;  // "485_EN" -> MAX485 DE+RE: held high, we only 
 constexpr int PIN_LED = 4;      // DMX LED through 220 ohms
 constexpr int PIN_BUTTON = 14;  // HOUSE button to GND, internal pull-up
 
-// WT32-ETH01's Ethernet chip
-constexpr int ETH_ADDR = 1, ETH_POWER = 16, ETH_MDC = 23, ETH_MDIO = 18;
+// WT32-ETH01's Ethernet chip. IO16 switches on the 50 MHz clock it runs from: it
+// must be on before Ethernet starts, so it's driven here rather than handed to
+// the driver as a reset pin (which leaves the clock off and fails with
+// "emac reset timeout").
+constexpr int ETH_ADDR = 1, ETH_CLOCK_ENABLE = 16, ETH_MDC = 23, ETH_MDIO = 18;
 
 constexpr const char* HOSTNAME = "lumiere-node";
 constexpr uint32_t DHCP_WAIT_MS = 6000;   // then fall back to the fixed address
@@ -58,6 +61,9 @@ show::Button button;
 
 volatile bool eth_link = false;
 volatile bool eth_has_ip = false;
+bool eth_started = false;
+bool services_started = false;
+uint32_t eth_retry_at = 0;
 bool using_fallback = false;
 uint32_t link_up_at = 0;
 uint32_t packets = 0, packets_window = 0, window_start = 0;
@@ -74,8 +80,8 @@ void loadSettings() {
   settings.gateway = IPAddress(prefs.getUInt("gw", (uint32_t)settings.gateway));
   settings.hold_ms = prefs.getUInt("hold", settings.hold_ms);
   settings.fade_ms = prefs.getUInt("fade", settings.fade_ms);
-  settings.ota_password = prefs.getString("otapw", settings.ota_password);
-  prefs.getBytes("house", stage.house, sizeof stage.house);  // stays dark if never saved
+  if (prefs.isKey("otapw")) settings.ota_password = prefs.getString("otapw", settings.ota_password);
+  if (prefs.isKey("house")) prefs.getBytes("house", stage.house, sizeof stage.house);  // dark until saved
   stage.hold_ms = settings.hold_ms;
   stage.fade_ms = settings.fade_ms;
 }
@@ -323,6 +329,18 @@ void setupWeb() {
 }
 
 // --- updates over the network --------------------------------------------------------
+// Start Ethernet (again, if an earlier try failed).
+void startEthernet() {
+  pinMode(ETH_CLOCK_ENABLE, OUTPUT);
+  digitalWrite(ETH_CLOCK_ENABLE, HIGH);
+  delay(50);  // let the clock settle
+  eth_started = ETH.begin(ETH_ADDR, -1, ETH_MDC, ETH_MDIO, ETH_PHY_LAN8720, ETH_CLOCK_GPIO0_IN);
+  if (!eth_started) {
+    Serial.println("Ethernet didn't start; trying again in 5 s");
+    eth_retry_at = millis() + 5000;
+  }
+}
+
 void setupOta() {
   ArduinoOTA.setHostname(HOSTNAME);
   ArduinoOTA.setPassword(settings.ota_password.c_str());
@@ -354,19 +372,27 @@ void setup() {
   xTaskCreatePinnedToCore(dmxTask, "dmx", 4096, nullptr, 3, nullptr, 1);
 
   WiFi.onEvent(onNetworkEvent);
-  ETH.begin(ETH_ADDR, ETH_POWER, ETH_MDC, ETH_MDIO, ETH_PHY_LAN8720, ETH_CLOCK_GPIO0_IN);
-  udp.begin(artnet::PORT);
-  setupWeb();
-  setupOta();
+  startEthernet();
   window_start = millis();
 }
 
 void loop() {
   uint32_t now = millis();
   esp_task_wdt_reset();
-  readArtnet();
-  web.handleClient();
-  ArduinoOTA.handle();
+  if (!eth_started && (int32_t)(now - eth_retry_at) >= 0) startEthernet();
+  // Art-Net, the web page and updates start once the network is up (they need it).
+  if (eth_has_ip && !services_started) {
+    services_started = true;
+    udp.begin(artnet::PORT);
+    setupWeb();
+    setupOta();
+    Serial.printf("Ready: http://%s/ or http://%s.local/\n", ETH.localIP().toString().c_str(), HOSTNAME);
+  }
+  if (services_started) {
+    readArtnet();
+    web.handleClient();
+    ArduinoOTA.handle();
+  }
   dhcpFallback();
 
   switch (button.update(digitalRead(PIN_BUTTON) == LOW, now)) {
