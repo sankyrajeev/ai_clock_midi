@@ -415,7 +415,7 @@ class LumiereEngine:
             self._emit(cue)
 
     def _audio_levels(self, levels: dict) -> None:
-        if self.live and self.cue_out:
+        if self.live and self.settings.phrases and self.cue_out:
             self.cue_out.audio_levels(levels)
 
     def _on_project_switch(self, project, pools) -> None:

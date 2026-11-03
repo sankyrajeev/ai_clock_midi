@@ -421,7 +421,7 @@ All in the **Controls** column on the right. Changes are remembered.
 | Follow the deck whose **fader is up**, not the tempo master | **Follow › On air** |
 | Always follow **one particular player** | Click that deck in the rack (**Follow › One deck**) |
 | Tracks with no rekordbox data (streaming) | Switch on **Live audio backup** and choose the audio interface (needs the FOH aux from part 1). |
-| Lightkey tempo only, no section cues | Switch off **Phrase cues**. |
+| Lightkey tempo only, no section cues | Click **Cues on** at the top right so it says **Cues off**: no cues, sequences, blackouts or faders are sent, but the BPM keeps going. (**Paused** stops everything, the BPM included.) |
 
 ---
 

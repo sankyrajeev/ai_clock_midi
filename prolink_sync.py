@@ -364,11 +364,13 @@ class Engine:
                     self.waiting_for_downbeat = True
                     continue
                 due = self.pll.next_tick
+            # Sleep right up to the tick. Spinning the last moments for extra precision
+            # kept a CPU core busy ~50 times a second (and starved the app's other
+            # threads); sleep is within a fraction of a millisecond, which
+            # Lightkey's tempo smoothing doesn't notice.
             delay = due - time.monotonic()
-            if delay > 0.002:
-                time.sleep(delay - 0.0015)
-            while time.monotonic() < due:  # spin the last ~1.5ms for jitter
-                pass
+            if delay > 0:
+                time.sleep(delay)
             with self.lock:
                 if self.pll.next_tick != due:  # PLL snapped while we slept
                     continue

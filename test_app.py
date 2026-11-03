@@ -149,3 +149,18 @@ def test_build_fader_defaults_never_reach_zero(app):
             eng._level(cc, v)
     values = [m.value for m in out if m.type == "control_change" and m.control in (25, 26)]
     assert values and min(values) >= 64
+
+
+def test_cues_off_keeps_the_bpm_going(app):
+    """Cues off: no cue messages, but the MIDI clock keeps running for Lightkey's BPM."""
+    eng, srv, ports, _ = app
+    call(srv, "/api/action", {"name": "set_switch", "args": {"name": "phrases", "on": False}})
+    cues = ports["Lumiere Cues"].sent
+    before = len(cues)
+    eng._emit(ph.DROP)
+    eng._level(ph.CC_BUILD_SPEED, 1.0)
+    assert len(cues) == before
+    assert eng.clock.midi is not None  # the clock still has its port
+    call(srv, "/api/action", {"name": "set_switch", "args": {"name": "phrases", "on": True}})
+    eng._emit(ph.DROP)
+    assert len(cues) > before

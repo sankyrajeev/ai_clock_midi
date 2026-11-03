@@ -678,7 +678,8 @@ body { padding: 0 !important; margin: 0; }
     <div class="leds" id="leds" aria-label="Devices on the network"></div>
     <div class="tb-right">
       <button class="help" id="helpBtn" aria-haspopup="dialog"><span class="q">i</span>How it works</button>
-      <button class="power" id="power" aria-pressed="true"><span class="ring"></span><span id="powerTxt">Live</span></button>
+      <button class="power" id="cuesBtn" aria-pressed="true" title="Cues off: no section cues, sequences, blackouts or faders go to Lightkey. The BPM keeps going."><span class="ring"></span><span id="cuesTxt">Cues on</span></button>
+      <button class="power" id="power" aria-pressed="true" title="Paused: nothing goes to Lightkey, the BPM included."><span class="ring"></span><span id="powerTxt">Live</span></button>
       <span class="ver" id="ver" title="Lumière Link version"></span>
       <img class="brand" src="/assets/brand/va-logo-white-short.png" alt="Vital Acoustica">
     </div>
@@ -772,7 +773,7 @@ body { padding: 0 !important; margin: 0; }
           </div>
         </div>
         <div class="ctl"><button class="switch" role="switch" aria-checked="true" data-switch="clock"><span class="txt"><span class="t">MIDI clock</span><span class="desc">Lightkey follows the BPM</span></span><span class="k"></span></button></div>
-        <div class="ctl"><button class="switch" role="switch" aria-checked="true" data-switch="phrases"><span class="txt"><span class="t">Phrase cues</span><span class="desc">From rekordbox, or read from the waveform</span></span><span class="k"></span></button></div>
+        <div class="ctl"><button class="switch" role="switch" aria-checked="true" data-switch="phrases"><span class="txt"><span class="t">Cues</span><span class="desc">Sections, sequences, blackout, faders. Off: only the BPM is sent</span></span><span class="k"></span></button></div>
         <div class="ctl">
           <button class="switch" role="switch" aria-checked="false" data-switch="live_audio" id="swLive"><span class="txt"><span class="t">Live audio backup</span><span class="desc">For tracks with no rekordbox data</span></span><span class="k"></span></button>
           <select id="audioIn" aria-label="Audio input"><option value="">Default input</option></select>
@@ -807,7 +808,9 @@ body { padding: 0 !important; margin: 0; }
       return await r.json();
     } finally { clearTimeout(timer); }
   }
+  let stateGen = 0;  // bumped by every action: a poll that started before it is out of date
   async function act(name, args = {}) {
+    stateGen++;
     try {
       const r = await api("/api/action", { method: "POST", body: JSON.stringify({ name, args }) });
       if (!r.ok) toast(r.error || "That didn't work");
@@ -894,6 +897,8 @@ body { padding: 0 !important; margin: 0; }
     if ($("ver").textContent !== ver) $("ver").textContent = ver;
     $("power").setAttribute("aria-pressed", String(S.live));
     $("powerTxt").textContent = S.live ? "Live" : "Paused";
+    $("cuesBtn").setAttribute("aria-pressed", String(!!S.settings.phrases));
+    $("cuesTxt").textContent = S.settings.phrases ? "Cues on" : "Cues off";
     $("app").classList.toggle("paused", !S.live);
     $("projName").textContent = S.project.name;
     const follow = S.settings.follow_lightkey;
@@ -1074,9 +1079,16 @@ body { padding: 0 !important; margin: 0; }
     c.fillStyle = g; c.fillRect(w / 2 - 14, 0, 28, h); c.fillStyle = colours().high; c.fillRect(Math.round(w / 2) - 1, 0, 2, h);
   }
   let lastDraw = 0;
+  // The waveform scrolls at 20 frames a second, and isn't redrawn at all while the
+  // window is hidden or the deck on screen is stopped and nothing has changed.
+  let lastSig = "";
   function frame(t) {
-    if (S && t - lastDraw > 30) {
+    if (S && !document.hidden && t - lastDraw > 50) {
       lastDraw = t;
+      const d = shownDeck != null ? deckN(shownDeck) : null;
+      const sig = d ? `${d.key}:${d.playing}:${d.beat}:${!!waves[d.key]}:${innerWidth}x${innerHeight}` : `none:${innerWidth}`;
+      if (!(d && d.playing) && sig === lastSig) { requestAnimationFrame(frame); return; }
+      lastSig = sig;
       drawWaves();
       S.decks.forEach(d => { const el = $("ph" + d.n); if (el && d.end_beat) el.style.left = `calc(${Math.min(100, (beatPos(d) - 1) / Math.max(1, d.end_beat - 1) * 100)}% - 1px)`; });
     }
@@ -1145,7 +1157,15 @@ body { padding: 0 !important; margin: 0; }
     $("audioIn").innerHTML = `<option value="">Default input</option>` + list.map(n => `<option${n === cur ? " selected" : ""}>${esc(n)}</option>`).join("");
   });
   $("audioIn").addEventListener("change", e => act("set_audio_device", { device: e.target.value }));
-  $("power").addEventListener("click", () => act("set_live", { on: !S.live }));
+  // Both change on screen at once; the engine follows within milliseconds.
+  $("power").addEventListener("click", async () => {
+    S.live = !S.live; renderTitle();
+    await act("set_live", { on: S.live }); poll(true);
+  });
+  $("cuesBtn").addEventListener("click", async () => {
+    S.settings.phrases = !S.settings.phrases; renderTitle(); renderControls();
+    await act("set_switch", { name: "phrases", on: S.settings.phrases }); poll(true);
+  });
   $("emptyDemo").addEventListener("click", () => act("set_switch", { name: "demo", on: true }));
   $("emptyGuide").addEventListener("click", () => openGuide(0));
 
@@ -1333,8 +1353,12 @@ body { padding: 0 !important; margin: 0; }
     if (polling && !once) return;
     polling = true;
     let next;
+    const gen = stateGen;
     try { next = await api("/api/state"); }
     catch (e) { if (++failures > 8) $("lost").hidden = false; polling = false; return; }
+    polling = false;
+    if (gen !== stateGen) return;  // an action happened meanwhile: wait for fresh state
+    polling = true;
     S = next; failures = 0;
     $("lost").hidden = true;
     if (first) { first = false; $("showAtStart").checked = !S.settings.guide_seen; if (!S.settings.guide_seen) openGuide(0); }
@@ -1343,7 +1367,7 @@ body { padding: 0 !important; margin: 0; }
     }
     polling = false;
   }
-  setInterval(() => poll(), 125);
+  setInterval(() => poll(), 200);
   poll();
   requestAnimationFrame(frame);
 })();
