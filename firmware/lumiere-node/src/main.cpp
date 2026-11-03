@@ -347,6 +347,11 @@ bool ethClockRunning() {
 
 void startEthernet() {
   pinMode(ETH_CLOCK_ENABLE, OUTPUT);
+  if (eth_retry_at == 0) {  // first start: report the clock with its enable pin off and on
+    digitalWrite(ETH_CLOCK_ENABLE, LOW);
+    delay(50);
+    Serial.printf("Ethernet clock with IO16 off: %s\n", ethClockRunning() ? "running" : "stopped");
+  }
   digitalWrite(ETH_CLOCK_ENABLE, HIGH);
   delay(50);  // let the clock settle
   if (!ethClockRunning()) {
