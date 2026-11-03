@@ -1,0 +1,42 @@
+name: Build the Lumière Node firmware
+
+on:
+  push:
+    paths:
+      - "firmware/lumiere-node/**"
+      - ".github/workflows/node-firmware.yml"
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firmware/lumiere-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Logic tests (on this computer)
+        run: |
+          g++ -std=c++17 -Wall -Wextra -Werror -I src test/test_logic.cpp -o test_logic
+          ./test_logic
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('firmware/lumiere-node/platformio.ini') }}
+      - run: pip install platformio
+      - name: Build for the WT32-ETH01
+        run: pio run -e usb
+      - name: Collect the files to flash
+        run: |
+          mkdir -p ../../node-firmware
+          B=.pio/build/usb
+          cp $B/firmware.bin $B/bootloader.bin $B/partitions.bin ../../node-firmware/
+          cp ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin ../../node-firmware/
+          ls -la ../../node-firmware
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumiere-node-firmware
+          path: node-firmware/
