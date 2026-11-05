@@ -67,6 +67,8 @@ uint32_t eth_retry_at = 0;
 bool using_fallback = false;
 uint32_t link_up_at = 0;
 uint32_t packets = 0, packets_window = 0, window_start = 0;
+int other_universe = -1;          // Art-Net seen for a universe we don't listen to...
+uint32_t other_universe_at = 0;   // ...and when, so the page can say so
 float packets_per_s = 0;
 volatile show::Mode current_mode = show::HOUSE;
 
@@ -200,7 +202,10 @@ void readArtnet() {
     switch (artnet::opcode(buf, n)) {
       case artnet::OP_DMX: {
         artnet::Dmx dmx;
-        if (artnet::parseDmx(buf, n, dmx) && dmx.universe == settings.universe) {
+        if (artnet::parseDmx(buf, n, dmx) && dmx.universe != settings.universe) {
+          other_universe = dmx.universe;
+          other_universe_at = millis();
+        } else if (artnet::parseDmx(buf, n, dmx)) {
           xSemaphoreTake(stage_lock, portMAX_DELAY);
           stage.onArtnet(dmx.data, dmx.length, millis());
           xSemaphoreGive(stage_lock);
@@ -255,7 +260,7 @@ button.gold{border-color:var(--brass);color:var(--brass)}.grid{display:grid;grid
 function post(u){fetch(u,{method:'POST'}).then(tick)}
 function dur(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+' h '+m+' min':m+' min '+(s%60)+' s'}
 function tick(){fetch('/status').then(r=>r.json()).then(s=>{houseOn=s.house_forced;
-mode.textContent=s.mode+(s.house_forced?' (HOUSE button)':'');rate.textContent=s.signal?s.fps.toFixed(0)+' packets/s':'nothing arriving';
+mode.textContent=s.mode+(s.house_forced?' (HOUSE button)':'');rate.textContent=s.signal?s.fps.toFixed(0)+' packets/s':(s.other_universe>=0?'arriving for universe '+s.other_universe+', not '+s.universe+': change the universe below':'nothing arriving');
 ip.textContent=s.link?(s.ip+' · '+s.how):'cable out';uni.textContent=s.universe;up.textContent=dur(s.uptime);
 hb.textContent=houseOn?'Back to live':'House look'})}
 tick();setInterval(tick,1000)</script></main></body></html>)HTML";
@@ -283,13 +288,15 @@ void setupWeb() {
     signal = stage.signal(now);
     forced = stage.houseForced();
     xSemaphoreGive(stage_lock);
-    char json[320];
+    char json[400];
+    int other = (other_universe >= 0 && now - other_universe_at < 2000) ? other_universe : -1;
     snprintf(json, sizeof json,
              "{\"mode\":\"%s\",\"signal\":%s,\"fps\":%.1f,\"house_forced\":%s,\"link\":%s,\"ip\":\"%s\","
-             "\"how\":\"%s\",\"universe\":%u,\"uptime\":%lu,\"packets\":%lu,\"version\":\"%s\"}",
+             "\"how\":\"%s\",\"universe\":%u,\"other_universe\":%d,\"uptime\":%lu,\"packets\":%lu,"
+             "\"version\":\"%s\"}",
              show::modeName(current_mode), signal ? "true" : "false", packets_per_s, forced ? "true" : "false",
              eth_has_ip ? "true" : "false", ETH.localIP().toString().c_str(),
-             (settings.dhcp && !using_fallback) ? "DHCP" : "fixed", settings.universe,
+             (settings.dhcp && !using_fallback) ? "DHCP" : "fixed", settings.universe, other,
              (unsigned long)(now / 1000), (unsigned long)packets, NODE_VERSION);
     web.send(200, "application/json", json);
   });
