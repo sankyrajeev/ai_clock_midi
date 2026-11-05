@@ -4,6 +4,10 @@
 #
 #   bash resident/install.sh
 #
+# It runs QLC+ 5 (built from source, the same version as on the Mac) on a
+# virtual screen you can see from the Mac with Screen Sharing. QLC=4 bash
+# resident/install.sh uses Debian's QLC+ 4 instead, with no screen at all.
+#
 # Safe to run again (after a git pull, say): it only changes what needs changing.
 set -euo pipefail
 
@@ -12,17 +16,32 @@ ME="$(id -un)"
 SHOW_DIR="$HOME/Lumiere"
 SCREEN_PORT=8080
 NET_LED_GPIO=17   # physical pin 11
+QLC="${QLC:-5}"
 
 step() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
-step "1/6  Installing Lumière Link's parts and QLC+"
+step "1/7  Installing Lumière Link's parts"
 sudo apt-get update -q
-sudo apt-get install -y -q python3-mido python3-rtmidi python3-numpy python3-gpiozero python3-lgpio \
-    qlcplus avahi-daemon
+sudo apt-get install -y -q python3-mido python3-rtmidi python3-numpy python3-gpiozero python3-lgpio avahi-daemon
 # MIDI between Lumière Link and QLC+, and the LED pins
 sudo usermod -aG audio,gpio "$ME"
 
-step "2/6  Ethernet: CDJs on 169.254.77.1 and the Lumière Node (Art-Net) on 2.0.0.2"
+step "2/7  QLC+ $QLC"
+if [ "$QLC" = 4 ]; then
+    sudo apt-get install -y -q qlcplus
+else
+    # The virtual screen QLC+ 5 draws on, and Screen Sharing (VNC) to see it from the Mac
+    sudo apt-get install -y -q xvfb x11vnc libgl1-mesa-dri
+    bash "$REPO/resident/build-qlcplus5.sh"
+    if [ ! -s "$HOME/.vnc/passwd" ]; then
+        echo
+        echo "Choose a password for Screen Sharing (seeing QLC+ on the Pi from the Mac), 8 characters at most:"
+        mkdir -p "$HOME/.vnc"
+        x11vnc -storepasswd "$HOME/.vnc/passwd"
+    fi
+fi
+
+step "3/7  Ethernet: CDJs on 169.254.77.1 and the Lumière Node (Art-Net) on 2.0.0.2"
 # One fixed setup on the Ethernet port. CDJs on a plain switch give themselves
 # 169.254.x.x addresses; the Node sits on 2.0.0.10. Wi-Fi stays as it is, for
 # setting up and updates. If players turn up on another network (a venue router),
@@ -36,10 +55,10 @@ echo "$ME ALL=(root) NOPASSWD: /usr/sbin/ip addr add * dev eth0" | sudo tee /etc
 sudo chmod 440 /etc/sudoers.d/lumiere-link
 sudo visudo -cf /etc/sudoers.d/lumiere-link >/dev/null
 
-step "3/6  The show folder for QLC+: $SHOW_DIR"
+step "4/7  The show folder for QLC+: $SHOW_DIR"
 mkdir -p "$SHOW_DIR"
 
-step "4/6  Starting by themselves at power-on, and restarting if they ever stop"
+step "5/7  Starting by themselves at power-on, and restarting if they ever stop"
 sudo tee /etc/systemd/system/lumiere-link.service >/dev/null <<UNIT
 [Unit]
 Description=Lumière Link (follows the CDJs, sends MIDI to QLC+)
@@ -59,35 +78,75 @@ RestartSec=2
 WantedBy=multi-user.target
 UNIT
 
-sudo tee /etc/systemd/system/lumiere-qlcplus.service >/dev/null <<UNIT
+if [ "$QLC" = 4 ]; then
+    QLC_START="$REPO/resident/run-qlcplus.sh $SHOW_DIR/show.qxw"
+    QLC_ENV="QT_QPA_PLATFORM=offscreen"
+    QLC_AFTER="lumiere-link.service"
+    sudo systemctl disable --now lumiere-display.service lumiere-vnc.service 2>/dev/null || true
+else
+    QLC_START="$REPO/resident/run-qlcplus5.sh $SHOW_DIR/show.qxw"
+    QLC_ENV="DISPLAY=:1"
+    QLC_AFTER="lumiere-link.service lumiere-display.service"
+    sudo tee /etc/systemd/system/lumiere-display.service >/dev/null <<UNIT
 [Unit]
-Description=QLC+ for Lumière Resident (MIDI in from Lumière Link, Art-Net out to the Node)
-After=lumiere-link.service
-Wants=lumiere-link.service
+Description=Virtual screen for QLC+ (display :1)
 
 [Service]
 User=$ME
-WorkingDirectory=$SHOW_DIR
-ExecStartPre=/bin/sleep 5
-ExecStart=$REPO/resident/run-qlcplus.sh $SHOW_DIR/show.qxw
-Environment=QT_QPA_PLATFORM=offscreen
+ExecStart=/usr/bin/Xvfb :1 -screen 0 1920x1080x24 -nolisten tcp
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    sudo tee /etc/systemd/system/lumiere-vnc.service >/dev/null <<UNIT
+[Unit]
+Description=Screen Sharing (VNC) for the QLC+ screen
+After=lumiere-display.service
+Requires=lumiere-display.service
+
+[Service]
+User=$ME
+ExecStart=/usr/bin/x11vnc -display :1 -rfbauth $HOME/.vnc/passwd -rfbport 5900 -forever -shared -noxdamage -quiet
 Restart=always
 RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
 UNIT
-chmod +x "$REPO/resident/run-qlcplus.sh"
+fi
 
-step "5/6  Hardware watchdog: the Pi restarts itself if it ever freezes"
+sudo tee /etc/systemd/system/lumiere-qlcplus.service >/dev/null <<UNIT
+[Unit]
+Description=QLC+ for Lumière Resident (MIDI in from Lumière Link, Art-Net out to the Node)
+After=$QLC_AFTER
+Wants=$QLC_AFTER
+
+[Service]
+User=$ME
+WorkingDirectory=$SHOW_DIR
+ExecStartPre=/bin/sleep 5
+ExecStart=$QLC_START
+Environment=$QLC_ENV
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+chmod +x "$REPO"/resident/*.sh
+
+step "6/7  Hardware watchdog: the Pi restarts itself if it ever freezes"
 sudo mkdir -p /etc/systemd/system.conf.d
 printf '[Manager]\nRuntimeWatchdogSec=15s\n' | sudo tee /etc/systemd/system.conf.d/lumiere-watchdog.conf >/dev/null
 
-step "6/6  Starting everything"
+step "7/7  Starting everything"
 sudo systemctl daemon-reload
-sudo systemctl enable lumiere-link.service lumiere-qlcplus.service
-sudo systemctl restart lumiere-link.service
-sudo systemctl restart lumiere-qlcplus.service
+SERVICES="lumiere-link.service lumiere-qlcplus.service"
+[ "$QLC" = 4 ] || SERVICES="lumiere-display.service lumiere-vnc.service $SERVICES"
+sudo systemctl enable $SERVICES
+for svc in $SERVICES; do sudo systemctl restart "$svc"; done
 sudo nmcli connection up lumiere-eth >/dev/null 2>&1 || true  # fine if no cable is in yet
 
 LINK_FILE="$HOME/.config/lumiere-link/screen-link.txt"
@@ -98,6 +157,7 @@ echo
 echo "  Lumière Link screen (bookmark it on your phone):"
 echo "    $(cat "$LINK_FILE" 2>/dev/null || echo "not ready yet: run  cat $LINK_FILE  in a minute")"
 echo "  QLC+ web page:  http://$(hostname).local:9999"
+[ "$QLC" = 4 ] || echo "  QLC+ screen from the Mac: Finder > Go > Connect to Server > vnc://$(hostname).local"
 echo
 echo "  Status:  systemctl status lumiere-link lumiere-qlcplus"
 echo "  Logs:    journalctl -u lumiere-link -f      (Ctrl+C to leave)"
