@@ -50,7 +50,9 @@ ssh <username>@lumiere-resident.local sudo systemctl restart lumiere-qlcplus
 
 Open the Pi's QLC+ with Screen Sharing once to point the inputs and outputs at
 the Pi's own: **MIDI input "Lumiere Cues"** (and "Lumiere Clock" for tempo),
-**Art-Net output on 2.0.0.2**. Save (File › Save) and it stays that way.
+**Art-Net output on 2.0.0.2**. Click away any pop-up QLC+ shows on opening the
+show (e.g. "2D Point of view selection"), then save (File › Save): it opens
+cleanly at every power-on after that.
 
 ## Checking on it
 

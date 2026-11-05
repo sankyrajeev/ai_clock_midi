@@ -31,7 +31,7 @@ if [ "$QLC" = 4 ]; then
     sudo apt-get install -y -q qlcplus
 else
     # The virtual screen QLC+ 5 draws on, and Screen Sharing (VNC) to see it from the Mac
-    sudo apt-get install -y -q xvfb x11vnc libgl1-mesa-dri
+    sudo apt-get install -y -q xvfb x11vnc matchbox-window-manager libgl1-mesa-dri
     bash "$REPO/resident/build-qlcplus5.sh"
     if [ ! -s "$HOME/.vnc/passwd" ]; then
         echo
@@ -82,11 +82,11 @@ if [ "$QLC" = 4 ]; then
     QLC_START="$REPO/resident/run-qlcplus.sh $SHOW_DIR/show.qxw"
     QLC_ENV="QT_QPA_PLATFORM=offscreen"
     QLC_AFTER="lumiere-link.service"
-    sudo systemctl disable --now lumiere-display.service lumiere-vnc.service 2>/dev/null || true
+    sudo systemctl disable --now lumiere-display.service lumiere-wm.service lumiere-vnc.service 2>/dev/null || true
 else
     QLC_START="$REPO/resident/run-qlcplus5.sh $SHOW_DIR/show.qxw"
     QLC_ENV="DISPLAY=:1"
-    QLC_AFTER="lumiere-link.service lumiere-display.service"
+    QLC_AFTER="lumiere-link.service lumiere-display.service lumiere-wm.service"
     sudo tee /etc/systemd/system/lumiere-display.service >/dev/null <<UNIT
 [Unit]
 Description=Virtual screen for QLC+ (display :1)
@@ -94,6 +94,25 @@ Description=Virtual screen for QLC+ (display :1)
 [Service]
 User=$ME
 ExecStart=/usr/bin/Xvfb :1 -screen 0 1920x1080x24 -nolisten tcp
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    # A kiosk window manager on the virtual screen: it makes QLC+ fill the screen
+    # (without one, "maximise" and "full screen" have nothing to act on).
+    sudo tee /etc/systemd/system/lumiere-wm.service >/dev/null <<UNIT
+[Unit]
+Description=Window manager for the QLC+ screen
+After=lumiere-display.service
+Requires=lumiere-display.service
+
+[Service]
+User=$ME
+Environment=DISPLAY=:1
+ExecStartPre=/bin/sleep 2
+ExecStart=/usr/bin/matchbox-window-manager -use_titlebar no
 Restart=always
 RestartSec=2
 
@@ -144,7 +163,7 @@ printf '[Manager]\nRuntimeWatchdogSec=15s\n' | sudo tee /etc/systemd/system.conf
 step "7/7  Starting everything"
 sudo systemctl daemon-reload
 SERVICES="lumiere-link.service lumiere-qlcplus.service"
-[ "$QLC" = 4 ] || SERVICES="lumiere-display.service lumiere-vnc.service $SERVICES"
+[ "$QLC" = 4 ] || SERVICES="lumiere-display.service lumiere-wm.service lumiere-vnc.service $SERVICES"
 sudo systemctl enable $SERVICES
 for svc in $SERVICES; do sudo systemctl restart "$svc"; done
 sudo nmcli connection up lumiere-eth >/dev/null 2>&1 || true  # fine if no cable is in yet
