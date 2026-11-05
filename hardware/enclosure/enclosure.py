@@ -5,6 +5,11 @@ Holds a Raspberry Pi 4 (with its 30 mm fan), a WT32-ETH01 (ESP32 with
 Ethernet), a MAX485 RS-485 module, two XLR DMX sockets (Neutrik D-size), a
 16 mm "HOUSE" button and two 5 mm status LEDs.
 
+Layout (top view): the lights side on the left (XLR outputs, RS-485 module,
+the WT32 with its ART-NET socket), the Pi in the back-right corner with its
+network and USB ports at the back and USB-C power out of the right wall.
+Front: NET and DMX LEDs and the HOUSE button on the left, the wordmark on the right.
+
     python3 enclosure.py            -> out/lumiere-resident-*.stl
 
 Every size is a number in the PARAMETERS section: measure your parts with
@@ -36,7 +41,9 @@ FIT = 0.3              # print clearance for anything that slides into something
 # Inside size
 IN_W, IN_D, IN_H = 164.0, 100.0, 38.0
 
-# Raspberry Pi 4: 85 x 56 board, ports on the 85 mm edge face the back
+# Raspberry Pi 4: 85 x 56 board. Positions are given as in Raspberry Pi's
+# mechanical drawing: "along 85" from the end opposite the USB/Ethernet ports,
+# "along 56" from the long edge with USB-C, micro-HDMI and audio.
 PI_LEN, PI_WID, PI_PCB = 85.0, 56.0, 1.5
 PI_HOLES = [(3.5, 3.5), (61.5, 3.5), (3.5, 52.5), (61.5, 52.5)]  # (along 85, along 56)
 PI_STANDOFF = 6.0
@@ -63,24 +70,30 @@ SCREW_HOLE, SCREW_HEAD = 3.4, 6.4       # M3 countersunk screws through the lid
 
 # ----------------------------------------------------------------- derived layout
 W, D, H = IN_W + 2 * WALL, IN_D + 2 * WALL, FLOOR + IN_H  # base outer size (lid on top)
-PI_X0 = WALL + 2.0                                         # board edge with the USB-C, 2 mm from the left wall
-PI_Y1 = D - WALL - PI_PORT_OVERHANG - 0.5                  # board's back edge
+PI_X1 = W - WALL - 2.0                                     # board edge with the USB-C, 2 mm from the right wall
+PI_X0 = PI_X1 - PI_WID                                     # edge with the GPIO header, facing the WT32
+PI_Y1 = D - WALL - PI_PORT_OVERHANG - 0.5                  # board's back edge (USB/Ethernet end)
 PI_Y0 = PI_Y1 - PI_LEN
 PI_Z = FLOOR + PI_STANDOFF                                 # underside of the Pi board
-ESP_CX = PI_X0 + PI_WID + 10 + ESP_WID / 2                 # RJ45 centred on the WT32's width
-XLR_CX = (ESP_CX + 30.0, ESP_CX + 61.0)
+XLR_CX = (24.0, 55.0)                                      # DMX 1, DMX 2 (back wall, left side)
 XLR_CZ = H / 2 + 1.0
+ESP_CX = 82.0                                              # WT32 centre; its RJ45 is ART-NET on the back
+# Front panel: status LEDs and the HOUSE button on the left, the wordmark on the right
+LED_X = (20.0, 32.0)                                       # NET, DMX
+BUTTON_X = 54.0
+CONTROLS_Z = H / 2 + 1.0
 COLUMN_D = 9.0
 VENT_Y0, VENT_PITCH, VENT_N = 41.0, 7.0, 8                 # side vents, front to back; clear of USB-C and POWER
-# Lid screw posts. The back-left one sits between the Pi and the WT32: the Pi's
-# corner fills that corner of the box.
+# Lid screw posts. The fourth one sits between the WT32 and the Pi: the Pi's USB
+# ports fill the back-right corner.
 COLUMNS = [(WALL + 4.0, WALL + 4.0), (W - WALL - 4.0, WALL + 4.0),
-           (PI_X0 + PI_WID + 5.0, D - WALL - 4.0), (W - WALL - 4.0, D - WALL - 4.0)]
+           (WALL + 4.0, D - WALL - 4.0), (PI_X0 - 5.5, D - WALL - 4.0)]
 
 
 def pi_xy(along85: float, along56: float) -> tuple[float, float]:
-    """A point on the Pi board -> box coordinates."""
-    return PI_X0 + along56, PI_Y0 + along85
+    """A point on the Pi board -> box coordinates. The board lies component side up
+    with its ports to the back, which puts the USB-C edge on the right."""
+    return PI_X1 - along56, PI_Y0 + along85
 
 
 # ----------------------------------------------------------------- helpers
@@ -134,6 +147,11 @@ def engrave_left(cs: CS, y, z, depth=0.6) -> M:
     return cs.extrude(depth + 1).rotate([90, 0, 0]).rotate([0, 0, -90]).translate([depth, y, z])
 
 
+def engrave_right(cs: CS, y, z, depth=0.6) -> M:
+    """Text cut into the right face (X = W), readable from the right."""
+    return cs.extrude(depth + 1).rotate([90, 0, 0]).rotate([0, 0, 90]).translate([W - depth, y, z])
+
+
 # ----------------------------------------------------------------- base
 def base() -> M:
     shell = rounded_rect(W, D, CORNER_R).extrude(H)
@@ -184,15 +202,15 @@ def base() -> M:
         for sx, sz in ((-XLR_SCREW_OFF[0], XLR_SCREW_OFF[1]), (XLR_SCREW_OFF[0], -XLR_SCREW_OFF[1])):
             body -= M.cylinder(WALL + 2, XLR_SCREW / 2).rotate([-90, 0, 0]).translate([cx + sx, D - WALL - 1, XLR_CZ + sz])
 
-    # --- left side: USB-C power for the Pi
+    # --- right side: USB-C power for the Pi
     uy = PI_Y0 + PI_USBC_AT
     usbc = rounded_rect(8.0, 13.0, 3.5).translate([-4.0, -6.5]).extrude(WALL + 2).rotate([0, 90, 0])
-    body -= usbc.translate([-1, uy, zb + 1.6])  # 13 x 8 opening: room for the plug's moulding
+    body -= usbc.translate([W - WALL - 1, uy, zb + 1.6])  # 13 x 8 opening: room for the plug's moulding
 
-    # --- front: HOUSE button and two status LEDs
-    bx, bz = W - 34.0, H / 2 + 1
+    # --- front: status LEDs and the HOUSE button
+    bx, bz = BUTTON_X, CONTROLS_Z
     body -= M.cylinder(WALL + 2, BUTTON_HOLE / 2).rotate([-90, 0, 0]).translate([bx, -1, bz])
-    for lx in (W - 70.0, W - 58.0):
+    for lx in LED_X:
         body -= M.cylinder(WALL + 2, LED_HOLE / 2).rotate([-90, 0, 0]).translate([lx, -1, bz])
 
     # --- vents: slim slots low on both sides (fan in the lid pulls air through)
@@ -209,11 +227,11 @@ def base() -> M:
     body -= engrave_back(text_cs("ART-NET", small, 3.6), ESP_CX, ez + ESP_RJ45_H + 3.4)
     for n, cx in enumerate(XLR_CX, 1):
         body -= engrave_back(text_cs(f"DMX {n}", small, 3.0), cx, 3.2)  # under the socket's flange
-    body -= engrave_left(text_cs("POWER", small, 3.6), uy, zb + 13.0)
+    body -= engrave_right(text_cs("POWER", small, 3.6), uy, zb + 13.0)
     body -= engrave_front(text_cs("HOUSE", small, 3.4), bx, bz - 13.5)
-    body -= engrave_front(text_cs("NET", small, 3.0), W - 70.0, bz - 8.0)
-    body -= engrave_front(text_cs("DMX", small, 3.0), W - 58.0, bz - 8.0)
-    body -= engrave_front(text_cs("Lumière Resident", "BodoniModa-Italic.ttf", 9.0, max_width=80.0), 52.0, H / 2 + 1)
+    body -= engrave_front(text_cs("NET", small, 3.0), LED_X[0], bz - 8.0)
+    body -= engrave_front(text_cs("DMX", small, 3.0), LED_X[1], bz - 8.0)
+    body -= engrave_front(text_cs("Lumière Resident", "BodoniModa-Italic.ttf", 9.0, max_width=80.0), 122.0, H / 2 + 1)
     # a fine line along the front, like a rack panel
     body -= box(10, -1, 6.0, W - 10, 0.5, 6.6)
 
@@ -257,8 +275,8 @@ def lid() -> M:
     ring = CS.circle(FAN["size"] / 2 + 3.2) - CS.circle(FAN["size"] / 2 + 2.4)
     part -= ring.extrude(1.0).translate([fx, fy, LID - 0.6])
     # brand on top
-    tx = (pi_xy(0, PI_WID)[0] + W) / 2 + 2
-    title = text_cs("Lumière Resident", "BodoniModa-Italic.ttf", 12.0, max_width=W - pi_xy(0, PI_WID)[0] - 14)
+    tx = (WALL + PI_X0) / 2
+    title = text_cs("Lumière Resident", "BodoniModa-Italic.ttf", 12.0, max_width=PI_X0 - WALL - 16)
     part -= title.extrude(1.0).translate([tx, D / 2 + 6, LID - 0.7])
     by = text_cs("VITAL  ACOUSTICA", "Manrope.ttf", 3.4)
     part -= by.extrude(1.0).translate([tx, D / 2 - 9, LID - 0.5])
@@ -267,13 +285,23 @@ def lid() -> M:
 
 # ----------------------------------------------------------------- parts for checking the fit
 def dummies() -> dict[str, M]:
-    """Rough stand-ins for the electronics, used to check nothing collides."""
+    """Stand-ins for the electronics (outlines plus the tall parts), used to check
+    nothing collides."""
     zb = PI_Z
-    pi = box(PI_X0, PI_Y0, zb, PI_X0 + PI_WID, PI_Y1, zb + PI_PCB)
-    pi += box(pi_xy(0, PI_ETH_AT)[0] - 8, PI_Y1 - 21, zb + PI_PCB, pi_xy(0, PI_ETH_AT)[0] + 8, PI_Y1 + PI_PORT_OVERHANG, zb + PI_PCB + PI_ETH_H)
-    for a in PI_USB_AT:
-        x = pi_xy(0, a)[0]
-        pi += box(x - 7, PI_Y1 - 17, zb + PI_PCB, x + 7, PI_Y1 + PI_PORT_OVERHANG, zb + PI_PCB + PI_USB_H)
+    top = zb + PI_PCB
+
+    def on_pi(a85_0, a85_1, a56_0, a56_1, z0, z1) -> M:
+        (xa, ya), (xb, yb) = pi_xy(a85_0, a56_0), pi_xy(a85_1, a56_1)
+        return box(min(xa, xb), min(ya, yb), z0, max(xa, xb), max(ya, yb), z1)
+
+    pi = box(PI_X0, PI_Y0, zb, PI_X1, PI_Y1, top)
+    pi += on_pi(64, PI_LEN + PI_PORT_OVERHANG, PI_ETH_AT - 8, PI_ETH_AT + 8, top, top + PI_ETH_H)   # Ethernet
+    for a in PI_USB_AT:                                                                          # USB pairs
+        pi += on_pi(68, PI_LEN + PI_PORT_OVERHANG, a - 7, a + 7, top, top + PI_USB_H)
+    pi += on_pi(7, 58, 49.5, 54.5, top, top + 8.5)                     # GPIO header (the jumper wires go on here)
+    pi += on_pi(18, 34, 25, 40, top, top + 10)                         # processor with its heatsink
+    pi += on_pi(7, 60, -1.5, 7, top, top + 6)                          # USB-C, micro-HDMI, audio on the right edge
+    pi += on_pi(-2.5, 0, 22, 36, zb - 1.5, zb)                         # microSD card, under the board
     fx, fy = pi_xy(*FAN["at"])
     fan = box(fx - 15, fy - 15, H - 2.0 - 8, fx + 15, fy + 15, H - 2.0)
     ey1 = D - WALL
@@ -287,9 +315,11 @@ def dummies() -> dict[str, M]:
         xlr += M.cylinder(21, 11.5).rotate([90, 0, 0]).translate([cx, D - WALL, XLR_CZ])
     rx0, ry0 = XLR_CX[0] - 12, D - WALL - 26 - RS485_WID - 6
     rs = box(rx0 + 1, ry0 + 1, FLOOR + 1.5, rx0 + 45, ry0 + 15, FLOOR + 1.5 + 12)
-    button = M.cylinder(28, 8).rotate([-90, 0, 0]).translate([W - 34.0, WALL, H / 2 + 1])
+    controls = M.cylinder(28, 8).rotate([-90, 0, 0]).translate([BUTTON_X, WALL, CONTROLS_Z])
+    for lx in LED_X:
+        controls += M.cylinder(9, 2.6).rotate([-90, 0, 0]).translate([lx, WALL, CONTROLS_Z])
     return {"Raspberry Pi 4": pi, "Pi fan": fan, "WT32-ETH01": esp, "XLR sockets": xlr,
-            "MAX485": rs, "HOUSE button": button}
+            "MAX485": rs, "HOUSE button and LEDs": controls}
 
 
 # ----------------------------------------------------------------- output

@@ -13,6 +13,19 @@ a **HOUSE** button and two status LEDs.
 
 ![Overview](out/overview.png)
 
+## Layout
+
+```
+ BACK:  [DMX 1] [DMX 2]   [ART-NET]   [DJ LINK] [USB]          (as seen from the front)
+        ┌───────────────────────────┬─────────────────────┐
+        │  XLR  XLR      WT32 (Node)│ Raspberry Pi 4      │ ← POWER (USB-C)
+        │  RS-485 module            │   (fan in the lid)  │   right wall
+ FRONT: [NET] [DMX] (HOUSE)          Lumière Resident
+```
+
+The Pi lies with its network and USB ports to the back, which puts its USB-C
+socket on the **right** wall and its pin header next to the WT32 (short wires).
+
 ## Files to print
 
 | File | Print orientation |
