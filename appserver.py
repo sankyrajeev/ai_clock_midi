@@ -30,11 +30,12 @@ ASSET_DIRS = {"assets": Path(__file__).with_name("assets"), "fonts": UI_DIR / "f
 
 
 class AppServer:
-    def __init__(self, engine, port: int = 0, token: Optional[str] = None):
+    def __init__(self, engine, port: int = 0, token: Optional[str] = None, host: str = "127.0.0.1"):
         self.engine = engine
         self.token = token or secrets.token_urlsafe(24)
+        self.host = host
         handler = self._handler()
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+        self.httpd = ThreadingHTTPServer((host, port), handler)
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
 

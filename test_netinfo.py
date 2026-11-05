@@ -266,3 +266,25 @@ def test_simulated_booth_sends_track_titles():
         rig.stop()
     assert info == {"title": "Rush Hour", "artist": "Mira Vale", "key": "8A", "tempo": 128.0}
     assert missing == {}
+
+
+IP_LINK = """1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000\\    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP mode DEFAULT group default qlen 1000\\    link/ether d8:3a:dd:12:34:56 brd ff:ff:ff:ff:ff:ff
+3: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DORMANT group default qlen 1000\\    link/ether d8:3a:dd:12:34:57 brd ff:ff:ff:ff:ff:ff
+"""
+IP_ADDR = """1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever
+2: eth0    inet 169.254.77.1/16 brd 169.254.255.255 scope link noprefixroute eth0\\       valid_lft forever preferred_lft forever
+2: eth0    inet 2.0.0.2/8 brd 2.255.255.255 scope global noprefixroute eth0\\       valid_lft forever preferred_lft forever
+3: wlan0    inet 192.168.1.61/24 brd 192.168.1.255 scope global dynamic noprefixroute wlan0\\       valid_lft 86000sec preferred_lft 86000sec
+"""
+
+
+def test_parse_linux_ip_on_the_resident():
+    ifaces = {i.name: i for i in ni.parse_ip(IP_LINK, IP_ADDR)}
+    eth = ifaces["eth0"]
+    assert eth.wired and eth.has_link and eth.mac == bytes.fromhex("d83add123456")
+    assert [(a.ip, a.netmask, a.broadcast) for a in eth.addrs] == [
+        ("169.254.77.1", "255.255.0.0", "169.254.255.255"), ("2.0.0.2", "255.0.0.0", "2.255.255.255")]
+    assert not ifaces["wlan0"].wired
+    iface, addr = ni.find_addr_for("169.254.31.7", list(ifaces.values()))
+    assert iface.name == "eth0" and addr.ip == "169.254.77.1"

@@ -1,4 +1,5 @@
-"""This Mac's network interfaces, and fixing a CDJ that sits on another subnet.
+"""This computer's network interfaces (a Mac, or the Pi in a Lumière Resident),
+and fixing a CDJ that sits on another subnet.
 
 Pro DJ Link gear normally self-assigns 169.254.x.x addresses on a plain
 switch. Things go wrong when a player keeps an old address, for example
@@ -44,7 +45,9 @@ class Iface:
 
     @property
     def wired(self) -> bool:
-        if not re.fullmatch(r"en\d+", self.name):
+        # macOS: en0, en5 ... (Wi-Fi is also an enN, told apart by its port name).
+        # Linux: eth0, or predictable names such as end0 / enp1s0; Wi-Fi is wlan0 / wlp...
+        if not re.fullmatch(r"en\d+|eth\d+|en[a-z][\w]*", self.name):
             return False
         return "wi-fi" not in self.port.lower() and "airport" not in self.port.lower()
 
@@ -81,6 +84,28 @@ def parse_ifconfig(text: str) -> list[Iface]:
     return ifaces
 
 
+def parse_ip(link_text: str, addr_text: str) -> list[Iface]:
+    """Parse Linux `ip -o link` and `ip -o -4 addr` output."""
+    ifaces: dict[str, Iface] = {}
+    for line in link_text.splitlines():
+        m = re.match(r"\d+:\s+([\w.-]+)(?:@\S+)?:\s+<([^>]*)>.*?\bstate (\w+)", line)
+        if not m:
+            continue
+        flags = m.group(2).split(",")
+        iface = Iface(name=m.group(1), up="UP" in flags,
+                      active=m.group(3) == "UP" if m.group(3) != "UNKNOWN" else None)
+        if mac := re.search(r"link/ether ([0-9a-f:]{17})", line):
+            iface.mac = bytes.fromhex(mac.group(1).replace(":", ""))
+        ifaces[iface.name] = iface
+    for line in addr_text.splitlines():
+        m = re.match(r"\d+:\s+([\w.-]+)\s+inet (\d+\.\d+\.\d+\.\d+)/(\d+)(?: brd (\d+\.\d+\.\d+\.\d+))?", line)
+        if not m or m.group(1) not in ifaces:
+            continue
+        net = ipaddress.ip_network(f"{m.group(2)}/{m.group(3)}", strict=False)
+        ifaces[m.group(1)].addrs.append(Addr(m.group(2), str(net.netmask), m.group(4) or str(net.broadcast_address)))
+    return list(ifaces.values())
+
+
 def parse_hardware_ports(text: str) -> dict[str, str]:
     """`networksetup -listallhardwareports` -> {device: port name}."""
     ports = {}
@@ -97,6 +122,8 @@ def _run(cmd: list[str]) -> str:
 
 
 def interfaces() -> list[Iface]:
+    if sys.platform.startswith("linux"):
+        return parse_ip(_run(["ip", "-o", "link"]), _run(["ip", "-o", "-4", "addr"]))
     ifaces = parse_ifconfig(_run(["ifconfig"]))
     ports = parse_hardware_ports(_run(["networksetup", "-listallhardwareports"]))
     for i in ifaces:
@@ -148,11 +175,22 @@ def wired_with_link(ifaces: list[Iface]) -> list[Iface]:
 
 
 def add_alias(iface: str, ip: str, netmask: str) -> tuple[bool, str]:
-    """Give `iface` an extra address. Asks for an admin password with the normal macOS dialog."""
-    if not re.fullmatch(r"en\d+", iface):
+    """Give `iface` an extra address. On a Mac this asks for an admin password with the
+    normal dialog; on the Resident's Pi the setup script allows it without one."""
+    if not re.fullmatch(r"en\d+|eth\d+|en[a-z][\w]*", iface):
         return False, f"refusing to change unexpected interface {iface!r}"
     ipaddress.IPv4Address(ip)
     ipaddress.IPv4Address(netmask)
+    if sys.platform.startswith("linux"):
+        prefix = ipaddress.ip_network(f"0.0.0.0/{netmask}").prefixlen
+        try:
+            result = subprocess.run(["sudo", "-n", "/usr/sbin/ip", "addr", "add", f"{ip}/{prefix}", "dev", iface],
+                                    capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as e:
+            return False, str(e)
+        if result.returncode != 0:
+            return False, result.stderr.strip() or "not allowed"
+        return True, f"added {ip} to {iface}"
     if sys.platform != "darwin":
         return False, f"automatic fix only works on macOS; run: sudo ifconfig {iface} alias {ip} netmask {netmask}"
     command = f"/sbin/ifconfig {iface} alias {ip} netmask {netmask}"
