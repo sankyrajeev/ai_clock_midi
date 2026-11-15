@@ -371,6 +371,19 @@ class Engine:
             delay = due - time.monotonic()
             if delay > 0:
                 time.sleep(delay)
+            elif -delay > max(0.015, 1.5 * self.pll.period):
+                # Woken late (an overloaded CPU, macOS App Nap with the window behind
+                # Lightkey). Sending every missed tick now would be a burst Lightkey
+                # reads as a huge BPM; skip them instead, keeping the bar position.
+                with self.lock:
+                    if self.pll.next_tick == due:
+                        skipped, now = 0, time.monotonic()
+                        while self.pll.next_tick < now and skipped < 100000:
+                            self.pll.tick()
+                            skipped += 1
+                        log.warning("Clock was held up %.0f ms: skipped %d ticks instead of sending them at once",
+                                    -delay * 1000, skipped)
+                continue
             with self.lock:
                 if self.pll.next_tick != due:  # PLL snapped while we slept
                     continue

@@ -99,3 +99,46 @@ def test_pll_follows_tempo_change(monkeypatch):
     second = list(beat_train(t0, 128.0, 16))
     run_pll(pll, first + second, until=second[-1][0])
     assert pll.period * TICKS_PER_BEAT == pytest.approx(60.0 / 128.0, rel=0.002)
+
+
+def test_clock_drops_missed_ticks_after_a_stall_instead_of_bursting():
+    """If the Mac stalls the app (an overloaded CPU, App Nap with the window behind
+    Lightkey), the clock must not fire every missed tick at once on waking: Lightkey
+    reads a burst as a huge BPM and every tempo-linked effect races."""
+    import threading
+    import time as _time
+
+    from prolink_sync import Beat, Engine, SourceSelector
+
+    class FakeMidi:
+        running = False
+
+        def __init__(self):
+            self.ticks = []
+
+        def clock(self):
+            self.ticks.append(_time.monotonic())
+
+        def start(self):
+            self.running = True
+            self.ticks.append(_time.monotonic())
+
+        def stop(self):
+            self.running = False
+
+    midi = FakeMidi()
+    eng = Engine(SourceSelector("auto"), midi, None, latency=0.0, stop_after=None, on_status=lambda s: None)
+    threading.Thread(target=eng.run_clock, daemon=True).start()
+    now = _time.monotonic()
+    eng.feed(Beat(device=1, name="CDJ", track_bpm=128.0, pitch=1.0, beat_in_bar=1, received=now))
+    _time.sleep(0.5)
+    with eng.lock:            # the app stalls for a second
+        _time.sleep(1.0)
+    woke = _time.monotonic()
+    _time.sleep(0.2)
+    eng.alive = False
+    after = [t for t in midi.ticks if t >= woke]
+    burst = sum(1 for t in after if t < woke + 0.1)
+    # 128 BPM is a tick every 19.5 ms: about 5 in the first 100 ms, never dozens.
+    assert burst <= 7, f"{burst} ticks in 100 ms after the stall"
+    assert len(after) >= 5  # and it carries on ticking normally

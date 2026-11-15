@@ -49,6 +49,7 @@ def main(argv=None) -> int:
                         format="%(asctime)s %(levelname)s %(message)s",
                         handlers=[logging.FileHandler(log_dir / "lumiere.log"), logging.StreamHandler()])
 
+    keep_awake = stay_out_of_app_nap()
     engine = LumiereEngine(demo=True if args.demo else None)
     engine.start()
     host = args.host or ("0.0.0.0" if args.headless else "127.0.0.1")
@@ -82,7 +83,26 @@ def main(argv=None) -> int:
     finally:
         server.stop()
         engine.stop()
+        del keep_awake
     return 0
+
+
+def stay_out_of_app_nap():
+    """Tell macOS this app does time-critical work. Otherwise, with its window behind
+    Lightkey, App Nap may slow its timers: the MIDI clock then stutters and cues land
+    late. Returns the activity token, which must be kept for the app's whole life."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        from Foundation import NSProcessInfo
+        user_initiated, latency_critical = 0x00FFFFFF, 0xFF00000000
+        token = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+            user_initiated | latency_critical, "Sending MIDI clock and cues to the lights")
+        logging.info("App Nap is off for Lumière Link (timing-critical)")
+        return token
+    except Exception as e:  # noqa: BLE001 - no PyObjC: carry on, but say so
+        logging.warning("Couldn't switch off App Nap (%s): keep Lumière Link's window visible during shows", e)
+        return None
 
 
 def screen_token(data_dir: Path) -> str:
@@ -169,6 +189,7 @@ def self_test() -> int:
     finally:
         server.stop()
         engine.stop()
+        del keep_awake
 
 
 if __name__ == "__main__":

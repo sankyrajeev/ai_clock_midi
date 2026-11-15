@@ -16,7 +16,7 @@ a = Analysis(
     ],
     hiddenimports=[
         "mido.backends.rtmidi", "rtmidi", "sounddevice", "numpy",
-        "webview", "webview.platforms.cocoa",
+        "webview", "webview.platforms.cocoa", "Foundation",
         "phrases", "waveform", "sections", "pools", "projects", "lightkey", "netinfo", "simrig",
         "engine", "appserver", "prolink_sync",
     ],
