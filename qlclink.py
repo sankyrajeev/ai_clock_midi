@@ -75,8 +75,49 @@ class QlcLink:
             self.send(f"CH|{addr}|{max(0, min(255, int(value)))}")
 
     def release(self, universe: int = 0) -> None:
-        """Hand the channels back to the show (clear the Simple Desk for a universe)."""
-        self.send(f"QLC+API|sdResetUniverse|{universe}")
+        """Hand the channels back to the show (clear the Simple Desk for a universe,
+        counted from 0 here; QLC+'s web API counts universes from 1)."""
+        self.send(f"QLC+API|sdResetUniverse|{universe + 1}")
+
+    def _recv_text(self) -> str:
+        s = self._connect()
+        def exact(n: int) -> bytes:
+            buf = b""
+            while len(buf) < n:
+                chunk = s.recv(n - len(buf))
+                if not chunk:
+                    raise ConnectionError("QLC+ closed the connection")
+                buf += chunk
+            return buf
+        while True:
+            b0, b1 = exact(2)
+            n = b1 & 0x7F
+            if n == 126:
+                n = struct.unpack(">H", exact(2))[0]
+            elif n == 127:
+                n = struct.unpack(">Q", exact(8))[0]
+            data = exact(n)
+            if b0 & 0x0F == 1:
+                return data.decode(errors="replace")
+
+    def channel_values(self, start: int, count: int, universe: int = 0) -> list[int]:
+        """Read DMX values from QLC+ (start counts from 1 within the universe)."""
+        return [v for v, _ in self.channel_info(start, count, universe)]
+
+    def channel_info(self, start: int, count: int, universe: int = 0) -> list[tuple[int, str]]:
+        """(value, QLC+ channel type) per channel; the type is "" where no light is
+        patched, "0.#FF0000" for a red intensity channel and so on."""
+        self.send(f"QLC+API|getChannelsValues|{universe + 1}|{start}|{count}")
+        end = time.monotonic() + self.timeout
+        while time.monotonic() < end:
+            msg = self._recv_text()
+            if msg.startswith("QLC+API|getChannelsValues|"):
+                parts = msg.split("|")[2:]
+                # QLC+ sends address|value|type|overridden per channel; it also pushes
+                # whole Simple Desk pages by itself, so only take our own answer
+                if len(parts) == 4 * count and parts[0] == str(start):
+                    return [(int(parts[i + 1]), parts[i + 2]) for i in range(0, len(parts), 4)]
+        raise TimeoutError("QLC+ didn't answer")
 
     def running(self) -> bool:
         try:
@@ -84,6 +125,14 @@ class QlcLink:
                 return True
         except OSError:
             return False
+
+
+def qlcplus_service_active(name: str = "lumiere-qlcplus") -> bool:
+    """True when QLC+ runs as the Resident's service, which starts it again by itself."""
+    try:
+        return subprocess.run(["systemctl", "is-active", "--quiet", name], timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def restart_qlcplus(names: tuple[str, ...] = ("qlcplus5", "qlcplus")) -> bool:

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import studio
 import studio as st
 
 XSD = Path(__file__).parent / "tests_data" / "qlcplus-fixture.xsd"
@@ -101,3 +102,123 @@ def test_rig_round_trips_through_json(tmp_path):
     st.save_rig(rig, tmp_path / "rig.json")
     again = st.load_rig(tmp_path / "rig.json")
     assert again.to_json() == rig.to_json()
+
+
+# ----------------------------------------------------------------- the desk
+class FakeLink:
+    def __init__(self):
+        self.sent, self.released, self.up = {}, 0, True
+
+    def set_channels(self, values):
+        self.sent.update(values)
+
+    def release(self, universe=0):
+        self.released += 1
+
+    def running(self):
+        return self.up
+
+    def close(self):
+        pass
+
+
+def make_desk(tmp_path):
+    link = FakeLink()
+    desk = studio.StudioDesk(tmp_path / "data", link=link, show_path=tmp_path / "show" / "show.qxw",
+                             fixtures_dir=tmp_path / "fixtures", restart=lambda: True)
+    return desk, link
+
+
+def test_desk_builds_a_rig_and_keeps_it(tmp_path):
+    desk, _ = make_desk(tmp_path)
+    desk.handle("new_profile", template="par7", name="Party Par")
+    desk.handle("new_profile", template="bar", name="LED Bar", segments=8)
+    st = desk.handle("add_lights", name="Par", profile="Party Par", group="Pars", count=4)
+    assert [l["address"] for l in st["rig"]["lights"]] == [1, 8, 15, 22]
+    st = desk.handle("add_lights", name="Bar", profile="LED Bar", address=50, group="Bars", count=2)
+    assert [l["address"] for l in st["rig"]["lights"][-2:]] == [50, 76]
+    assert st["groups"] == ["Pars", "Bars"]
+    again = studio.StudioDesk(tmp_path / "data", link=FakeLink())
+    assert len(again.rig.lights) == 6 and set(again.rig.profiles) == {"Party Par", "LED Bar"}
+
+
+def test_desk_explains_clashes_and_changes_nothing(tmp_path):
+    desk, _ = make_desk(tmp_path)
+    desk.handle("new_profile", template="par7", name="Par")
+    desk.handle("add_lights", name="A", profile="Par", address=1)
+    desk.handle("add_lights", name="B", profile="Par", address=8)
+    with pytest.raises(ValueError, match="already used by A"):
+        desk.handle("add_lights", name="C", profile="Par", address=5, count=3)
+    assert len(desk.rig.lights) == 2
+    with pytest.raises(ValueError, match="already used by B"):
+        desk.handle("update_light", id=0, address=3)
+    assert desk.rig.lights[0].address == 1
+    # growing the profile to 8 channels would run light A into light B
+    big = studio.from_template("par8", "Par").to_json()
+    with pytest.raises(ValueError, match="overlap"):
+        desk.handle("save_profile", profile=big, old_name="Par")
+    assert desk.rig.profiles["Par"].count == 7
+    with pytest.raises(ValueError, match="Remove the lights"):
+        desk.handle("delete_profile", name="Par")
+
+
+def test_desk_renames_a_profile_with_its_lights(tmp_path):
+    desk, _ = make_desk(tmp_path)
+    desk.handle("new_profile", template="rgb3", name="Cheap")
+    desk.handle("add_lights", name="P", profile="Cheap", count=2)
+    prof = desk.rig.profiles["Cheap"].to_json() | {"name": "Wash"}
+    desk.handle("save_profile", profile=prof, old_name="Cheap")
+    assert set(desk.rig.profiles) == {"Wash"} and {l.profile for l in desk.rig.lights} == {"Wash"}
+
+
+def test_desk_test_looks_and_finder(tmp_path):
+    desk, link = make_desk(tmp_path)
+    desk.handle("new_profile", template="par7", name="Par")
+    desk.handle("new_profile", template="strobe2", name="Strobe")
+    desk.handle("add_lights", name="P", profile="Par", group="Pars", count=2)
+    desk.handle("add_lights", name="S", profile="Strobe", group="Strobes")
+    desk.handle("look", look="red", group="Pars")
+    assert [link.sent[a] for a in range(1, 8)] == [255, 255, 0, 0, 0, 0, 0]
+    assert link.sent[15] == 0 and link.sent[16] == 0      # the strobe stays off
+    desk.handle("identify", light=1)
+    assert link.sent[1] == 0 and link.sent[8] == 255 and link.sent[9] == 255
+    desk.handle("probe", address=100, values=[255, 0, 128])
+    assert (link.sent[100], link.sent[101], link.sent[102]) == (255, 0, 128)
+    assert desk.state()["testing"]
+    desk.handle("release")
+    assert link.released == 1 and not desk.state()["testing"]
+
+
+def test_desk_apply_writes_the_show_and_restarts_qlcplus(tmp_path):
+    desk, _ = make_desk(tmp_path)
+    with pytest.raises(ValueError, match="Patch at least one"):
+        desk.handle("apply")
+    desk.handle("new_profile", template="rgbw4", name="Wash")
+    desk.handle("add_lights", name="W", profile="Wash", count=3)
+    out = desk.handle("apply")
+    assert (tmp_path / "fixtures" / "Lumiere-Wash.qxf").exists()
+    assert (tmp_path / "show" / "Lumiere-Wash.qxf").exists()   # QLC+ also looks next to the show
+    assert "<Fixture>" in (tmp_path / "show" / "show.qxw").read_text()
+    assert out["fixtures"] == ["Lumiere-Wash.qxf"]
+
+
+def test_engine_passes_studio_actions(tmp_path):
+    from engine import LumiereEngine
+    eng = LumiereEngine(data_dir=tmp_path / "data", projects_dir=tmp_path / "projects", demo=True)
+    st = eng.action("studio", {"op": "state"})
+    assert "par7" in st["templates"] and st["rig"]["lights"] == []
+    with pytest.raises(ValueError):
+        eng.action("studio", {"op": "nope"})
+
+
+def test_desk_asks_before_replacing_a_show_made_in_qlcplus(tmp_path):
+    desk, _ = make_desk(tmp_path)
+    desk.handle("new_profile", template="rgb3", name="Par")
+    desk.handle("add_lights", name="P", profile="Par")
+    desk.show_path.parent.mkdir(parents=True)
+    desk.show_path.write_text('<Workspace><Engine><Function ID="0" Type="Scene" Name="Red"/></Engine></Workspace>')
+    out = desk.handle("apply")
+    assert "1 scenes" in out["confirm"] and "<Function" in desk.show_path.read_text()
+    out = desk.handle("apply", replace=True)
+    assert out["restarted"] and "<Function" not in desk.show_path.read_text()
+    assert "<Function" in Path(out["backup"]).read_text()

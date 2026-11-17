@@ -118,6 +118,7 @@ class LumiereEngine:
         self.audio = None
         self.watcher = None
         self.link = None
+        self.studio = None      # Lumière Studio, made the first time its screen opens
         self._net_alive = False
         self.started = False
 
@@ -432,6 +433,13 @@ class LumiereEngine:
         result = fn(**(args or {}))
         self.settings.save(self.settings_path)
         return result
+
+    def do_studio(self, op: str, **args):
+        """Lumière Studio (lights set up through QLC+): see studio.StudioDesk."""
+        if self.studio is None:
+            from studio import StudioDesk
+            self.studio = StudioDesk(self.data_dir)
+        return self.studio.handle(op, **args)
 
     def do_set_live(self, on: bool) -> None:
         self.live = bool(on)

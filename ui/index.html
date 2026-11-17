@@ -280,6 +280,67 @@ select:disabled { color: var(--tick); }
 .foot-btns { display: flex; gap: 10px; }
 
 
+/* ---------- Lumière Studio sheet ---------- */
+.sheet.studio { width: 1080px; height: 720px; }
+.studio .foot-btns .btn { white-space: nowrap; }
+.st-head-mid { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+.qlcpill { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; color: var(--unit); }
+.qlcpill .led { width: 8px; height: 8px; border-radius: 50%; background: var(--track); }
+.qlcpill.on { color: var(--label); }
+.qlcpill.on .led { background: var(--sage); box-shadow: 0 0 8px var(--sage); }
+.st-body { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; padding: 18px 22px; min-height: 0; overflow: hidden; }
+.st-body.one { grid-template-columns: minmax(0, 1fr); }
+.st-col { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; min-height: 0; }
+.st-list { display: grid; gap: 6px; align-content: start; padding: 8px; overflow-y: auto; }
+.st-pane { padding: 16px 18px; overflow-y: auto; display: grid; gap: 14px; align-content: start; }
+.st-pane h3 { margin: 0; font-size: 18px; font-weight: 600; color: var(--ivory); }
+.st-pane p { margin: 0; color: var(--label); font-size: 13px; }
+.st-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 12px; align-items: end; }
+.st-form label, .fld { display: grid; gap: 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--unit); }
+.st input[type=text], .st input[type=number] { width: 100%; padding: 7px 10px; border-radius: 8px; border: 0; background: var(--well); box-shadow: var(--sink);
+  color: var(--value); font: inherit; font-size: 12.5px; }
+.st input[type=number] { font-family: var(--f-mono); }
+.st input[type=checkbox] { accent-color: #B8A47B; }
+.chk { display: inline-flex !important; grid-auto-flow: column; align-items: center; gap: 8px; letter-spacing: 0 !important; text-transform: none !important; font-size: 12.5px !important; color: var(--label) !important; }
+.chans { display: grid; gap: 5px; }
+.chrow { display: grid; grid-template-columns: 54px minmax(0, 1fr) 90px 30px; gap: 8px; align-items: center; }
+.chrow .n { font-family: var(--f-mono); font-size: 11px; color: var(--unit); }
+.chrow.find { grid-template-columns: 54px minmax(0, 1.2fr) minmax(0, 1fr) 64px 40px; }
+.chrow input[type=range] { width: 100%; accent-color: #B8A47B; }
+.chrow .v { font-family: var(--f-mono); font-size: 11px; color: var(--value); text-align: right; }
+.mini { padding: 5px 9px; border-radius: 7px; border: 1px solid var(--track); background: linear-gradient(180deg, var(--hover), var(--body)); color: var(--label); font-size: 11.5px; font-weight: 700; }
+.mini:hover { color: var(--ivory); }
+.mini.on { border-color: var(--pressed); color: var(--brass-glow); background: linear-gradient(180deg, #3A3222, var(--sel-bg)); }
+.mini.danger:hover { color: var(--ember); border-color: var(--ember); }
+.tag { display: inline-block; padding: 2px 7px; border-radius: 6px; background: var(--well); font-size: 10.5px; color: var(--label); margin: 2px 3px 0 0; }
+.tag.c-red { color: #E58B7B; } .tag.c-green { color: #9CC08F; } .tag.c-blue { color: #8FB2DD; } .tag.c-white { color: var(--ivory); }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.patch { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.patch th { text-align: left; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--unit); font-weight: 700; padding: 0 10px 8px 0; }
+.patch td { padding: 6px 10px 6px 0; border-top: 1px solid rgba(240,237,229,.06); color: var(--label); }
+.patch td .nm { color: var(--ivory); font-weight: 600; }
+.patch input[type=number] { width: 72px !important; }
+.patch .rng { font-family: var(--f-mono); font-size: 11px; color: var(--unit); }
+.dmxmap { position: relative; height: 22px; border-radius: 6px; background: var(--well); box-shadow: var(--sink); overflow: hidden; }
+.dmxmap i { position: absolute; top: 3px; bottom: 3px; border-radius: 2px; background: var(--c); opacity: .85; }
+.dmxlegend { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 10px; color: var(--unit); margin-top: 4px; }
+.looks { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+.look { height: 64px; border-radius: 12px; border: 1px solid var(--track); background: linear-gradient(180deg, #232321, #1D1D1C); box-shadow: var(--raise);
+  display: grid; place-items: center; gap: 4px; font-weight: 700; font-size: 12px; color: var(--value); }
+.look .sw { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 60%, transparent); }
+.look:hover { border-color: var(--pressed); }
+.look.on { border-color: var(--brass); background: linear-gradient(180deg, #2E281C, var(--sel-bg)); }
+.st-note { padding: 12px 14px; border-radius: 10px; background: var(--well); box-shadow: var(--sink); color: var(--label); font-size: 12.5px; }
+.st-note b { color: var(--value); }
+.st-note.ok { box-shadow: var(--sink), inset 3px 0 0 var(--sage); }
+.st-note.warn { box-shadow: var(--sink), inset 3px 0 0 var(--amber); }
+.studiobtn { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; border: 1px solid var(--pressed);
+  background: linear-gradient(180deg, #3A3222, var(--sel-bg)); color: var(--brass-glow); font-weight: 700; font-size: 12.5px; box-shadow: var(--raise); }
+.studiobtn .dots { display: grid; grid-template-columns: repeat(2, 5px); gap: 2px; }
+.studiobtn .dots i { width: 5px; height: 5px; border-radius: 50%; }
+.studiobtn .dots i:nth-child(1) { background: #E0604A; } .studiobtn .dots i:nth-child(2) { background: #86A37E; }
+.studiobtn .dots i:nth-child(3) { background: #7FA0C9; } .studiobtn .dots i:nth-child(4) { background: #F0EDE5; }
+
 /* ---------- sequences sheet ---------- */
 .seqbtn { display: inline-flex; align-items: center; gap: 9px; padding: 7px 13px 7px 9px; border-radius: 9px; font-weight: 700; font-size: 12.5px;
   background: linear-gradient(180deg, #3A3222, var(--sel-bg)); border: 1px solid var(--pressed); color: var(--brass-glow); box-shadow: var(--raise); }
@@ -584,6 +645,31 @@ body { padding: 0 !important; margin: 0; }
     </div>
   </div>
 
+  <div class="guide st" id="stSheet" role="dialog" aria-modal="true" aria-labelledby="stTitle" hidden>
+    <div class="sheet studio">
+      <div class="sheet-head">
+        <h2 id="stTitle">Lumi<em>è</em>re Studio</h2>
+        <nav class="steps-nav" id="stTabs" aria-label="Studio steps">
+          <button data-tab="lights" aria-current="step">1 · Lights</button>
+          <button data-tab="patch">2 · Patch</button>
+          <button data-tab="test">3 · Test &amp; send to QLC+</button>
+        </nav>
+        <div class="st-head-mid">
+          <span class="qlcpill" id="stQlc"><span class="led"></span><span id="stQlcTxt">QLC+</span></span>
+          <button class="x" id="stClose" aria-label="Close Studio">✕</button>
+        </div>
+      </div>
+      <div class="st-body" id="stBody"></div>
+      <div class="sheet-foot">
+        <span class="label" id="stFoot"></span>
+        <div class="foot-btns">
+          <button class="btn" id="stRelease" hidden>Give the lights back to the show</button>
+          <button class="btn primary" id="stApply">Send to QLC+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="guide" id="seqSheet" role="dialog" aria-modal="true" aria-labelledby="seqTitle" hidden>
     <div class="sheet seq">
       <div class="sheet-head">
@@ -677,6 +763,7 @@ body { padding: 0 !important; margin: 0; }
     </div>
     <div class="leds" id="leds" aria-label="Devices on the network"></div>
     <div class="tb-right">
+      <button class="studiobtn" id="studioBtn" aria-haspopup="dialog" title="Set up the venue's lights in QLC+"><span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Studio</button>
       <button class="help" id="helpBtn" aria-haspopup="dialog"><span class="q">i</span>How it works</button>
       <button class="power" id="cuesBtn" aria-pressed="true" title="Cues off: no section cues, sequences, blackouts or faders go to Lightkey. The BPM keeps going."><span class="ring"></span><span id="cuesTxt">Cues on</span></button>
       <button class="power" id="power" aria-pressed="true" title="Paused: nothing goes to Lightkey, the BPM included."><span class="ring"></span><span id="powerTxt">Live</span></button>
@@ -1312,6 +1399,265 @@ body { padding: 0 !important; margin: 0; }
   $("seqBtn").addEventListener("click", () => { $("seqSheet").hidden = false; renderSeq(); });
   $("seqClose").addEventListener("click", () => { $("seqSheet").hidden = true; });
   $("seqSheet").addEventListener("click", e => { if (e.target === $("seqSheet")) $("seqSheet").hidden = true; });
+
+  // ----- Lumière Studio: lights set up through QLC+ -----
+  const ST = { s: null, tab: "lights", prof: null, finder: null, look: null, target: "all", applied: null };
+  const ROLE_TAG = { red: "c-red", green: "c-green", blue: "c-blue", white: "c-white" };
+  const GROUP_COLOURS = ["#B8A47B", "#6FAAA0", "#7FA0C9", "#A792CF", "#D99A4E", "#86A37E", "#E0604A", "#AAB36E"];
+  const LOOK_COLOURS = { off: "#1a1a19", white: "#F0EDE5", red: "#E0604A", green: "#86A37E", blue: "#5F86C9", amber: "#D99A4E", uv: "#8A6BD1", strobe: "#FFFFFF" };
+  async function stDo(op, args = {}) {
+    const r = await act("studio", { op, ...args });
+    if (r && r.rig) ST.s = r;
+    return r;
+  }
+  function stRoleSelect(val, cls = "") {
+    return `<select class="${cls}">${Object.entries(ST.s.roles).map(([k, l]) => `<option value="${k}"${k === val ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  }
+  function stProfiles() { return ST.s.rig.profiles; }
+  function stGroupColour(g) { return GROUP_COLOURS[Math.max(0, ST.s.groups.indexOf(g)) % GROUP_COLOURS.length]; }
+  function stLabel(c) { return ST.s.roles[c.role] + (c.segment ? " " + c.segment : ""); }
+
+  function renderStudio() {
+    const s = ST.s; if (!s) return;
+    document.querySelectorAll("#stTabs button").forEach(b => b.setAttribute("aria-current", b.dataset.tab === ST.tab ? "step" : "false"));
+    $("stQlc").classList.toggle("on", s.qlc);
+    $("stQlcTxt").textContent = s.qlc ? "QLC+ running" : "QLC+ not found";
+    $("stRelease").hidden = !s.testing;
+    $("stFoot").textContent = `${s.rig.lights.length} lights · ${s.used} of 512 channels · QLC+ show: ${s.show_name}`;
+    $("stFoot").title = s.show;
+    const body = $("stBody");
+    body.classList.toggle("one", ST.tab !== "lights");
+    if (ST.tab === "lights") body.innerHTML = stLightsTab();
+    else if (ST.tab === "patch") body.innerHTML = stPatchTab();
+    else body.innerHTML = stTestTab();
+  }
+
+  // 1 · Lights: the kinds of light in the venue
+  function stLightsTab() {
+    const profs = stProfiles();
+    const list = profs.map(p => `<div class="prow${ST.prof === p.name ? " sel" : ""}" data-prof="${esc(p.name)}">
+        <span class="chip" style="--c:var(--brass)"></span>
+        <span><div class="nm">${esc(p.name)}</div><div class="sub">${esc(ST.s.kinds[p.kind])} · ${p.channels.length} ch</div></span><span></span></div>`).join("")
+      || `<p style="padding:8px;color:var(--unit)">No lights yet. Add the first kind of light on the right.</p>`;
+    let pane;
+    if (ST.finder) pane = stFinderPane();
+    else if (ST.prof && profs.find(p => p.name === ST.prof)) pane = stProfilePane(profs.find(p => p.name === ST.prof));
+    else pane = stNewPane();
+    return `<div class="st-col"><div class="label">Kinds of light in the venue</div>
+      <div class="well st-list">${list}
+        <button class="mini" data-st="new" style="margin-top:6px">+ Add a kind of light</button>
+        <button class="mini" data-st="finder">Light finder (no manual)</button></div></div>
+      <div class="well st-pane">${pane}</div>`;
+  }
+  function stNewPane() {
+    const opts = Object.entries(ST.s.templates).map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`).join("");
+    return `<h3>Add a kind of light</h3>
+      <p>Pick what it's closest to. Most cheap lights have a DIP or menu setting like <b>7CH</b> or <b>d-7</b>: match the channel count. You can change every channel afterwards, or use the <b>Light finder</b> if you don't know.</p>
+      <div class="st-form">
+        <label>Starts like<select id="stTpl">${opts}</select></label>
+        <label>Name it<input type="text" id="stName" placeholder="e.g. Stage pars" maxlength="40"></label>
+        <label id="stSegL">Segments<input type="number" id="stSeg" value="8" min="1" max="64"></label>
+        <label class="chk" id="stWhiteL"><input type="checkbox" id="stWhite"> White in each segment</label>
+      </div>
+      <div class="btnrow"><button class="btn primary" data-st="create">Add this light</button></div>`;
+  }
+  function stProfilePane(p) {
+    const rows = p.channels.map((c, i) => `<div class="chrow" data-i="${i}"><span class="n">CH ${i + 1}</span>${stRoleSelect(c.role, "role")}
+        <input type="number" class="seg" min="0" max="64" value="${c.segment || 0}" title="Segment (0 = whole light)">
+        <button class="mini danger" data-st="delch" title="Remove channel">✕</button></div>`).join("");
+    const used = ST.s.rig.lights.filter(l => l.profile === p.name).length;
+    return `<h3>${esc(p.name)}</h3>
+      <div class="st-form"><label>Name<input type="text" id="stPName" value="${esc(p.name)}" maxlength="40"></label>
+        <label>Kind<select id="stPKind">${Object.entries(ST.s.kinds).map(([k, l]) => `<option value="${k}"${k === p.kind ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label></div>
+      <p>What each DMX channel does, in order. Segment is for LED bars: the part of the bar the channel belongs to (0 = the whole light).</p>
+      <div class="chans" id="stChans">${rows}</div>
+      <div class="btnrow"><button class="mini" data-st="addch">+ Channel</button>
+        <span style="flex:1"></span>
+        <button class="mini danger" data-st="delprof"${used ? " disabled title=\"Remove its lights from the patch first\"" : ""}>Delete</button>
+        <button class="btn primary" data-st="saveprof">Save</button></div>
+      <p style="color:var(--unit)">${used ? `${used} light${used > 1 ? "s" : ""} in the patch use this.` : "Not in the patch yet."}</p>`;
+  }
+  function stFinderPane() {
+    const f = ST.finder;
+    const rows = f.roles.map((r, i) => `<div class="chrow find" data-i="${i}"><span class="n">CH ${i + 1}</span>${stRoleSelect(r, "role")}
+        <input type="range" min="0" max="255" value="${f.values[i]}" class="val"><span class="v">${f.values[i]}</span>
+        <button class="mini${f.solo === i ? " on" : ""}" data-st="solo">Try</button></div>`).join("");
+    return `<h3>Light finder</h3>
+      <p>For lights with no manual. Set the light's DMX address, then press <b>Try</b> on each channel: it goes to full while the others go to 0 (channels you've called <b>Dimmer</b> stay up). Write down what the light does by picking it from the list.</p>
+      <div class="st-form"><label>Light's address<input type="number" id="stFAddr" min="1" max="512" value="${f.address}"></label>
+        <label>Channels<input type="number" id="stFCount" min="1" max="64" value="${f.roles.length}"></label>
+        <label>Name it<input type="text" id="stFName" value="${esc(f.name)}" maxlength="40" placeholder="e.g. Wash par"></label></div>
+      <div class="chans" id="stFind">${rows}</div>
+      <div class="btnrow"><button class="mini" data-st="fall0">All to 0</button><span style="flex:1"></span>
+        <button class="btn" data-st="fcancel">Cancel</button><button class="btn primary" data-st="fsave">Save as a kind of light</button></div>`;
+  }
+  async function stProbe() {
+    const f = ST.finder;
+    await stDo("probe", { address: f.address, values: f.values });
+    $("stRelease").hidden = false;
+  }
+  function stSolo(i) {
+    const f = ST.finder; f.solo = i;
+    f.values = f.roles.map((r, j) => j === i || r === "dimmer" ? 255 : 0);
+  }
+
+  // 2 · Patch: every light, its address and group
+  function stPatchTab() {
+    const s = ST.s, profs = stProfiles();
+    if (!profs.length) return `<div class="well st-pane"><h3>Patch</h3><p>Add a kind of light in step 1 first.</p></div>`;
+    const byName = Object.fromEntries(profs.map(p => [p.name, p]));
+    const lights = [...s.rig.lights].sort((a, b) => a.address - b.address);
+    const map = lights.map(l => { const n = byName[l.profile].channels.length;
+      return `<i style="left:${(l.address - 1) / 512 * 100}%;width:${n / 512 * 100}%;--c:${stGroupColour(l.group)}" title="${esc(l.name)} ${l.address}-${l.address + n - 1}"></i>`; }).join("");
+    const rows = lights.map(l => { const n = byName[l.profile].channels.length;
+      return `<tr data-id="${l.id}"><td><input type="text" class="lname" value="${esc(l.name)}" maxlength="40"></td>
+        <td>${esc(l.profile)}</td>
+        <td><input type="text" class="lgroup" value="${esc(l.group)}" list="stGroups" maxlength="30"></td>
+        <td><input type="number" class="laddr" min="1" max="512" value="${l.address}"> <span class="rng">to ${l.address + n - 1}</span></td>
+        <td class="btnrow"><button class="mini" data-st="ident">Find it</button><button class="mini danger" data-st="rmlight">Remove</button></td></tr>`; }).join("");
+    const pOpts = profs.map(p => `<option>${esc(p.name)}</option>`).join("");
+    return `<div class="well st-pane">
+      <div><div class="dmxmap">${map}</div><div class="dmxlegend"><span>1</span><span>DMX universe · ${s.used} channels used</span><span>512</span></div></div>
+      <div class="st-form">
+        <label>Kind of light<select id="stAProf">${pOpts}</select></label>
+        <label>How many<input type="number" id="stACount" value="1" min="1" max="64"></label>
+        <label>Name<input type="text" id="stAName" placeholder="e.g. Par" maxlength="30"></label>
+        <label>Group<input type="text" id="stAGroup" list="stGroups" placeholder="e.g. Front pars" maxlength="30"></label>
+        <label>First address<input type="number" id="stAAddr" min="1" max="512" placeholder="next free"></label>
+        <button class="btn primary" data-st="addlights">Add to the patch</button>
+      </div>
+      <datalist id="stGroups">${s.groups.map(g => `<option value="${esc(g)}">`).join("")}</datalist>
+      ${lights.length ? `<table class="patch"><thead><tr><th>Name</th><th>Kind</th><th>Group</th><th>Address</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<p>No lights patched yet. Several of the same kind get addresses one after the other; set each light's address to match (its DIP switches or menu, e.g. <b>A001</b>).</p>`}
+    </div>`;
+  }
+
+  // 3 · Test and send to QLC+
+  function stTestTab() {
+    const s = ST.s;
+    const targets = [["all", "All lights"], ...s.groups.map(g => ["g:" + g, g])];
+    const ap = ST.applied;
+    const applied = ap ? (ap.restarted
+        ? `<div class="st-note ok"><b>Sent.</b> QLC+ restarted with ${s.rig.lights.length} lights and the light files ${esc(ap.fixtures.join(", "))}. ${ap.kept_io ? "Its outputs (Art-Net to the Node) were kept." : "<b>Set QLC+'s output to Art-Net, IP 2.0.0.10</b>: the show didn't have one yet."}${ap.backup ? ` The old show is saved as ${esc(ap.backup.split("/").pop())}.` : ""}</div>`
+        : `<div class="st-note warn"><b>Written.</b> ${esc(ap.note || "")}</div>`) : "";
+    return `<div class="well st-pane">
+      <h3>Test the rig</h3>
+      <p>These go straight to the lights through QLC+, so you can check the patch before the show. <b>Give the lights back to the show</b> when you're done.</p>
+      <div class="btnrow">${targets.map(([k, l]) => `<button class="mini${ST.target === k ? " on" : ""}" data-st="target" data-k="${esc(k)}">${esc(l)}</button>`).join("")}</div>
+      <div class="looks">${s.looks.map(k => `<button class="look${ST.look === k ? " on" : ""}" data-st="look" data-k="${k}"><span class="sw" style="--c:${LOOK_COLOURS[k] || "#888"}"></span>${k === "uv" ? "UV" : k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
+      ${s.qlc ? "" : `<div class="st-note warn"><b>QLC+ isn't answering.</b> Studio talks to QLC+ through its web page: start it with <b>--web</b> (the Resident does this already).</div>`}
+      <h3 style="margin-top:8px">Send to QLC+</h3>
+      <p>Writes a light file for each kind of light and patches every light in QLC+'s show (${esc(s.show)}), with a fixture group for each group. The show's outputs are kept, and the old show is saved first. On the Resident, QLC+ restarts by itself with the new patch.</p>
+      ${applied}
+    </div>`;
+  }
+
+  function stReadProfile() {
+    const rows = [...document.querySelectorAll("#stChans .chrow")];
+    return { name: $("stPName").value.trim(), kind: $("stPKind").value,
+      channels: rows.map(r => { const seg = +r.querySelector(".seg").value; return { role: r.querySelector(".role").value, ...(seg > 0 ? { segment: seg } : {}) }; }) };
+  }
+  function stSyncNewForm() {
+    const t = $("stTpl"); if (!t) return;
+    const bar = t.value === "bar";
+    $("stSegL").hidden = !bar; $("stWhiteL").hidden = !bar;
+  }
+
+  $("stBody").addEventListener("click", async e => {
+    const prow = e.target.closest("[data-prof]");
+    if (prow) { ST.prof = prow.dataset.prof; ST.finder = null; return renderStudio(); }
+    const b = e.target.closest("[data-st]"); if (!b) return;
+    const what = b.dataset.st, s = ST.s;
+    if (what === "new") { ST.prof = null; ST.finder = null; renderStudio(); stSyncNewForm(); }
+    else if (what === "create") {
+      const tpl = $("stTpl").value, name = $("stName").value.trim() || s.templates[tpl].label;
+      const args = { template: tpl, name };
+      if (tpl === "bar") Object.assign(args, { segments: +$("stSeg").value || 8, white: $("stWhite").checked });
+      if (await stDo("new_profile", args)) { ST.prof = name; renderStudio(); toast(`Added ${esc(name)}. Check each channel, then patch it in step 2.`); }
+    }
+    else if (what === "addch" || what === "delch") {
+      const p = stReadProfile(), live = s.rig.profiles.find(x => x.name === ST.prof);
+      if (what === "addch") p.channels.push({ role: "nothing" }); else p.channels.splice(+b.closest(".chrow").dataset.i, 1);
+      live.channels = p.channels; live.name = ST.prof; live.kind = p.kind; renderStudio(); $("stPName").value = p.name;
+    }
+    else if (what === "saveprof") {
+      const p = stReadProfile();
+      if (await stDo("save_profile", { profile: p, old_name: ST.prof })) { ST.prof = p.name; renderStudio(); toast("Saved. Send to QLC+ (step 3) to use it."); }
+      else { await stDo("state"); renderStudio(); }
+    }
+    else if (what === "delprof") { if (await stDo("delete_profile", { name: ST.prof })) { ST.prof = null; renderStudio(); } }
+    else if (what === "finder") { ST.prof = null; ST.finder = { address: 1, name: "", roles: Array(7).fill("nothing"), values: Array(7).fill(0), solo: null }; renderStudio(); }
+    else if (what === "solo") { stSolo(+b.closest(".chrow").dataset.i); renderStudio(); await stProbe(); }
+    else if (what === "fall0") { ST.finder.values = ST.finder.values.map(() => 0); ST.finder.solo = null; renderStudio(); await stProbe(); }
+    else if (what === "fcancel") { ST.finder = null; await stDo("release"); renderStudio(); }
+    else if (what === "fsave") {
+      const f = ST.finder, name = (f.name || "").trim();
+      if (!name) { toast("Give the light a name first."); return $("stFName").focus(); }
+      const segs = f.roles.filter(r => r !== "nothing").length;
+      const kind = f.roles.includes("pan") ? "moving_head" : segs <= 2 && f.roles.includes("strobe") ? "strobe" : "par";
+      if (await stDo("save_profile", { profile: { name, kind, channels: f.roles.map(role => ({ role })) } })) {
+        ST.finder = null; ST.prof = name; await stDo("release"); renderStudio(); toast(`Saved ${esc(name)}. Patch it in step 2.`);
+      }
+    }
+    else if (what === "addlights") {
+      const r = await stDo("add_lights", { profile: $("stAProf").value, name: $("stAName").value.trim(), count: +$("stACount").value || 1,
+        group: $("stAGroup").value.trim() || "Lights", address: $("stAAddr").value ? +$("stAAddr").value : null });
+      if (r) renderStudio();
+    }
+    else if (what === "rmlight") { if (await stDo("remove_light", { id: +b.closest("tr").dataset.id })) renderStudio(); }
+    else if (what === "ident") { await stDo("identify", { light: +b.closest("tr").dataset.id }); renderStudio(); toast("That light is on full white; the others are off."); }
+    else if (what === "target") { ST.target = b.dataset.k; renderStudio(); }
+    else if (what === "look") {
+      ST.look = b.dataset.k;
+      const args = { look: ST.look }; if (ST.target.startsWith("g:")) args.group = ST.target.slice(2);
+      await stDo("look", args); renderStudio();
+    }
+  });
+  $("stBody").addEventListener("change", async e => {
+    const t = e.target;
+    if (t.id === "stTpl") return stSyncNewForm();
+    const tr = t.closest("tr[data-id]");
+    if (tr) {
+      const field = t.classList.contains("lname") ? "name" : t.classList.contains("lgroup") ? "group" : t.classList.contains("laddr") ? "address" : null;
+      if (!field) return;
+      const ok = await stDo("update_light", { id: +tr.dataset.id, [field]: field === "address" ? +t.value : t.value });
+      if (!ok) await stDo("state");
+      return renderStudio();
+    }
+    const f = ST.finder; if (!f) return;
+    if (t.id === "stFAddr") { f.address = Math.max(1, Math.min(512, +t.value || 1)); await stProbe(); }
+    else if (t.id === "stFCount") {
+      const n = Math.max(1, Math.min(64, +t.value || 1));
+      f.roles = Array.from({ length: n }, (_, i) => f.roles[i] || "nothing");
+      f.values = Array.from({ length: n }, (_, i) => f.values[i] || 0);
+      renderStudio();
+    }
+    else if (t.id === "stFName") f.name = t.value;
+    else if (t.classList.contains("role")) {
+      const row = t.closest(".chrow"); if (!row || !row.classList.contains("find")) return;
+      f.roles[+row.dataset.i] = t.value;
+      if (f.solo !== null) { stSolo(f.solo); renderStudio(); await stProbe(); }
+    }
+  });
+  $("stBody").addEventListener("input", e => {
+    const t = e.target; if (!t.classList.contains("val") || !ST.finder) return;
+    const i = +t.closest(".chrow").dataset.i;
+    ST.finder.values[i] = +t.value; t.nextElementSibling.textContent = t.value;
+    clearTimeout(ST._probeTimer); ST._probeTimer = setTimeout(stProbe, 60);
+  });
+  $("stTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; ST.tab = b.dataset.tab; ST.finder = null; renderStudio(); });
+  $("stApply").addEventListener("click", async () => {
+    $("stApply").disabled = true; $("stApply").textContent = "Sending…";
+    try {
+      let r = await act("studio", { op: "apply" });
+      if (r && r.confirm) r = confirm(r.confirm) ? await act("studio", { op: "apply", replace: true }) : null;
+      if (r) { ST.applied = r; ST.tab = "test"; await stDo("state"); renderStudio(); toast(r.restarted ? "Sent to QLC+. It's restarting with the new patch." : "Written. Reopen the show in QLC+."); }
+    } finally { $("stApply").disabled = false; $("stApply").textContent = "Send to QLC+"; }
+  });
+  $("stRelease").addEventListener("click", async () => { ST.look = null; if (ST.finder) ST.finder.solo = null; await stDo("release"); renderStudio(); });
+  $("studioBtn").addEventListener("click", async () => { $("stSheet").hidden = false; if (await stDo("state")) { renderStudio(); stSyncNewForm(); } });
+  $("stClose").addEventListener("click", () => { $("stSheet").hidden = true; });
+  $("stSheet").addEventListener("click", e => { if (e.target === $("stSheet")) $("stSheet").hidden = true; });
 
   // ----- guide -----
   const steps = [...document.querySelectorAll(".step")];

@@ -13,6 +13,7 @@ heads), or are found channel by channel with the light finder.
 from __future__ import annotations
 
 import json
+import sys
 import re
 import shutil
 import time
@@ -301,12 +302,16 @@ def io_map_of(show_xml: str) -> str:
 def write_show(rig: Rig, show_path: Path, fixtures_dir: Path) -> dict:
     """Write the fixture definitions and the show for QLC+, keeping the current
     show's inputs and outputs and a backup of it. Returns what was written."""
+    show_path, fixtures_dir = Path(show_path), Path(fixtures_dir)
     fixtures_dir.mkdir(parents=True, exist_ok=True)
+    show_path.parent.mkdir(parents=True, exist_ok=True)
     written = []
     for p in rig.profiles.values():
-        path = fixtures_dir / f"{p.file_stem}.qxf"
-        path.write_text(p.to_qxf())
-        written.append(path.name)
+        # QLC+'s own fixtures folder, plus a copy next to the show: QLC+ looks there
+        # when a definition isn't in its folders (e.g. when it runs as root).
+        for folder in dict.fromkeys((fixtures_dir, show_path.parent)):
+            (folder / f"{p.file_stem}.qxf").write_text(p.to_qxf())
+        written.append(f"{p.file_stem}.qxf")
     io_map, backup = "", None
     if show_path.exists():
         old = show_path.read_text(errors="replace")
@@ -333,3 +338,194 @@ def save_rig(rig: Rig, path: Path) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(rig.to_json(), indent=1))
     tmp.replace(path)
+
+
+# ----------------------------------------------------------------- the desk
+def qlc_fixtures_dir() -> Path:
+    """Where QLC+ reads user fixture definitions (only when it starts)."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "QLC+" / "Fixtures"
+    if sys.platform.startswith("win"):
+        return Path.home() / "QLC+" / "Fixtures"
+    return Path.home() / ".qlcplus" / "fixtures"
+
+
+DEFAULT_SHOW = Path.home() / "Lumiere" / "show.qxw"
+
+# Test looks: value per role; roles not named go to 0
+LOOKS = {
+    "off": {},
+    "white": {"dimmer": 255, "red": 255, "green": 255, "blue": 255, "white": 255},
+    "red": {"dimmer": 255, "red": 255},
+    "green": {"dimmer": 255, "green": 255},
+    "blue": {"dimmer": 255, "blue": 255},
+    "amber": {"dimmer": 255, "red": 255, "green": 90, "amber": 255},
+    "uv": {"dimmer": 255, "red": 60, "blue": 255, "uv": 255},
+    "strobe": {"dimmer": 255, "red": 255, "green": 255, "blue": 255, "white": 255, "strobe": 220},
+}
+
+
+class StudioDesk:
+    """What the Studio screen talks to: keeps the rig, writes the QLC+ show and
+    drives QLC+'s Simple Desk for test looks and the light finder."""
+
+    def __init__(self, data_dir: Path, link=None, show_path: Optional[Path] = None,
+                 fixtures_dir: Optional[Path] = None, restart=None):
+        from qlclink import QlcLink, qlcplus_service_active, restart_qlcplus
+        self.path = Path(data_dir) / "studio-rig.json"
+        self.rig = load_rig(self.path)
+        self.link = link or QlcLink()
+        self.show_path = Path(show_path) if show_path else DEFAULT_SHOW
+        self.fixtures_dir = Path(fixtures_dir) if fixtures_dir else qlc_fixtures_dir()
+        # Only stop QLC+ when its service will start it again (the Resident); on a
+        # laptop that would just close it
+        self.restart = restart or (lambda: qlcplus_service_active() and restart_qlcplus())
+        self.testing = False
+
+    def _save(self) -> None:
+        save_rig(self.rig, self.path)
+
+    def _light(self, light_id) -> Light:
+        for l in self.rig.lights:
+            if l.id == int(light_id):
+                return l
+        raise ValueError("That light isn't in the patch any more.")
+
+    def state(self) -> dict:
+        return {
+            "rig": self.rig.to_json(),
+            "templates": {k: {"label": v[0], "kind": v[1]} for k, v in TEMPLATES.items()},
+            "roles": {k: v[0] for k, v in ROLES.items()},
+            "kinds": KINDS,
+            "looks": list(LOOKS),
+            "groups": list(self.rig.groups()),
+            "used": len(self.rig.used()),
+            "next_free": {p.name: self.rig.next_free(p.count) for p in self.rig.profiles.values()},
+            "show": str(self.show_path),
+        "show_name": self.show_path.name,
+            "qlc": self.link.running(),
+            "testing": self.testing,
+        }
+
+    def handle(self, op: str, **args):
+        fn = getattr(self, "op_" + op, None)
+        if fn is None:
+            raise ValueError(f"unknown Studio action {op!r}")
+        out = fn(**args)
+        return self.state() if out is None else out
+
+    # -- profiles
+    def op_state(self):
+        return None
+
+    def op_new_profile(self, template: str, name: str = "", **params):
+        if template not in TEMPLATES:
+            raise ValueError("Pick a kind of light.")
+        p = from_template(template, name.strip(), **{k: v for k, v in params.items() if v is not None})
+        return self.op_save_profile(p.to_json())
+
+    def op_save_profile(self, profile: dict, old_name: Optional[str] = None):
+        p = Profile.from_json(profile)
+        p.name = p.name.strip()
+        problems = p.check()
+        if problems:
+            raise ValueError(problems[0])
+        if p.name in self.rig.profiles and p.name != old_name:
+            raise ValueError(f"There's already a light called {p.name!r}.")
+        before = self.rig.to_json()
+        if old_name and old_name != p.name:
+            self.rig.profiles.pop(old_name, None)
+            for l in self.rig.lights:
+                if l.profile == old_name:
+                    l.profile = p.name
+        self.rig.profiles[p.name] = p
+        clashes = [m for l in self.rig.lights if l.profile == p.name for m in self.rig.check_light(l)]
+        if clashes:   # more channels now run into the next light: put everything back
+            self.rig = Rig.from_json(before)
+            raise ValueError("With that many channels the lights would overlap. " + clashes[0])
+        self._save()
+
+    def op_delete_profile(self, name: str):
+        if any(l.profile == name for l in self.rig.lights):
+            raise ValueError("Remove the lights using this profile from the patch first.")
+        self.rig.profiles.pop(name, None)
+        self._save()
+
+    # -- the patch
+    def op_add_lights(self, name: str, profile: str, address=None, group: str = "Lights", count: int = 1):
+        count = max(1, min(64, int(count)))
+        address = int(address) if address not in (None, "", 0) else None
+        before = list(self.rig.lights)
+        try:
+            self.rig.add(name.strip() or profile, profile, address, group.strip() or "Lights", count)
+        except ValueError:
+            self.rig.lights = before
+            raise
+        self._save()
+
+    def op_update_light(self, id, **fields):
+        light = self._light(id)
+        old = asdict(light)
+        for k in ("name", "group", "profile"):
+            if k in fields and str(fields[k]).strip():
+                setattr(light, k, str(fields[k]).strip())
+        if "address" in fields:
+            light.address = int(fields["address"])
+        problems = self.rig.check_light(light)
+        if problems:
+            for k, v in old.items():
+                setattr(light, k, v)
+            raise ValueError(problems[0])
+        self._save()
+
+    def op_remove_light(self, id):
+        light = self._light(id)
+        self.rig.lights.remove(light)
+        self._save()
+
+    # -- QLC+
+    def op_apply(self, replace: bool = False):
+        if not self.rig.lights:
+            raise ValueError("Patch at least one light first.")
+        if not replace and self.show_path.exists():
+            made = len(re.findall(r"<Function\b", self.show_path.read_text(errors="replace")))
+            if made:
+                return {"confirm": f"The QLC+ show has {made} scenes, chases or other functions made in QLC+. "
+                                   "Studio's show replaces them (the old show is saved first). Go ahead?"}
+        out = write_show(self.rig, self.show_path, self.fixtures_dir)
+        self.link.close()
+        out["restarted"] = bool(self.restart())
+        if not out["restarted"]:
+            out["note"] = f"Close QLC+ and open {self.show_path} again: QLC+ only reads new lights when it starts."
+        return out
+
+    def op_look(self, look: str, light=None, group: Optional[str] = None):
+        if look not in LOOKS:
+            raise ValueError("unknown look")
+        values = self.rig.channels_for({}, None)   # everything to 0 first
+        targets = ([self._light(light)] if light is not None else
+                   self.rig.groups().get(group, []) if group else self.rig.lights)
+        for l in targets:
+            values.update(self.rig.channels_for(LOOKS[look], l))
+        self._send(values)
+
+    def op_identify(self, light):
+        return self.op_look("white", light=light)
+
+    def op_probe(self, address, values: list):
+        """The light finder: set channels from `address` on (one value each)."""
+        address = int(address)
+        if not 1 <= address <= DMX_CHANNELS:
+            raise ValueError("Address must be 1-512.")
+        self._send({address + i: int(v) for i, v in enumerate(values[:64]) if address + i <= DMX_CHANNELS})
+
+    def op_release(self):
+        self.link.release(0)
+        self.testing = False
+
+    def _send(self, values: dict[int, int]) -> None:
+        try:
+            self.link.set_channels(values)
+        except OSError as e:
+            raise ValueError("Can't reach QLC+. Is it running with its web page on (--web)?") from e
+        self.testing = True
