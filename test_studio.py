@@ -241,3 +241,21 @@ def test_finder_light_with_repeated_channels_becomes_a_bar_with_segments(tmp_pat
     # a pattern that doesn't add up still explains itself
     with pytest.raises(ValueError, match="appear twice"):
         desk.handle("save_profile", profile={"name": "Odd", "channels": [{"role": r} for r in ["red", "red", "red", "red", "green", "green"]]})
+
+
+def test_looks_light_up_single_colour_lights(tmp_path):
+    desk, link = make_desk(tmp_path)
+    chans = [{"role": r} for r in ["dimmer", "amber"] * 10]
+    desk.handle("save_profile", profile={"name": "Amber bar", "channels": chans})
+    desk.handle("new_profile", template="rgb3", name="RGB")
+    desk.handle("add_lights", name="Bar", profile="Amber bar", address=1)
+    desk.handle("add_lights", name="Par", profile="RGB", address=30)
+    for look in ("white", "red", "blue", "amber", "strobe"):
+        desk.handle("look", look=look)
+        assert [link.sent[a] for a in range(1, 5)] == [255, 255, 255, 255], look
+    desk.handle("look", look="red")
+    assert [link.sent[a] for a in (30, 31, 32)] == [255, 0, 0]     # the RGB par is really red
+    desk.handle("look", look="amber")
+    assert link.sent[30] == 255 and link.sent[31] == 90             # and amber-ish
+    desk.handle("look", look="off")
+    assert not any(link.sent[a] for a in range(1, 21))

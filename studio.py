@@ -385,14 +385,15 @@ DEFAULT_SHOW = Path.home() / "Lumiere" / "show.qxw"
 # Test looks: value per role; roles not named go to 0
 LOOKS = {
     "off": {},
-    "white": {"dimmer": 255, "red": 255, "green": 255, "blue": 255, "white": 255},
+    "white": {"dimmer": 255, "red": 255, "green": 255, "blue": 255, "white": 255, "amber": 255},
     "red": {"dimmer": 255, "red": 255},
     "green": {"dimmer": 255, "green": 255},
     "blue": {"dimmer": 255, "blue": 255},
     "amber": {"dimmer": 255, "red": 255, "green": 90, "amber": 255},
     "uv": {"dimmer": 255, "red": 60, "blue": 255, "uv": 255},
-    "strobe": {"dimmer": 255, "red": 255, "green": 255, "blue": 255, "white": 255, "strobe": 220},
+    "strobe": {"dimmer": 255, "red": 255, "green": 255, "blue": 255, "white": 255, "amber": 255, "strobe": 220},
 }
+COLOUR_ROLES = ("red", "green", "blue", "white", "amber", "uv")
 
 
 class StudioDesk:
@@ -542,7 +543,13 @@ class StudioDesk:
         targets = ([self._light(light)] if light is not None else
                    self.rig.groups().get(group, []) if group else self.rig.lights)
         for l in targets:
-            values.update(self.rig.channels_for(LOOKS[look], l))
+            roles = LOOKS[look]
+            has = {c.role for c in self.rig.profiles[l.profile].channels}
+            if look != "off" and not has & {r for r in roles if r in COLOUR_ROLES}:
+                # a colour this light can't make (red on an amber-only bar): show it
+                # in its own colours, so every light still answers the test
+                roles = {**LOOKS["white"], **({"strobe": roles["strobe"]} if "strobe" in roles else {})}
+            values.update(self.rig.channels_for(roles, l))
         self._send(values)
 
     def op_identify(self, light):
