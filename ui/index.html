@@ -304,6 +304,8 @@ select:disabled { color: var(--tick); }
 .chk { display: inline-flex !important; grid-auto-flow: column; align-items: center; gap: 8px; letter-spacing: 0 !important; text-transform: none !important; font-size: 12.5px !important; color: var(--label) !important; }
 .chans { display: grid; gap: 5px; }
 .chrow { display: grid; grid-template-columns: 54px minmax(0, 1fr) 90px 30px; gap: 8px; align-items: center; }
+.rep { gap: 6px; color: var(--label); font-size: 12.5px; }
+.rep input[type=number] { width: 64px !important; }
 .chrow .n { font-family: var(--f-mono); font-size: 11px; color: var(--unit); }
 .chrow.find { grid-template-columns: 54px minmax(0, 1.2fr) minmax(0, 1fr) 64px 40px; }
 .chrow input[type=range] { width: 100%; accent-color: #B8A47B; }
@@ -1470,6 +1472,7 @@ body { padding: 0 !important; margin: 0; }
       <div class="st-form"><label>Name<input type="text" id="stPName" value="${esc(p.name)}" maxlength="40"></label>
         <label>Kind<select id="stPKind">${Object.entries(ST.s.kinds).map(([k, l]) => `<option value="${k}"${k === p.kind ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label></div>
       <p>What each DMX channel does, in order. Segment is for LED bars: the part of the bar the channel belongs to (0 = the whole light).</p>
+      ${stRepeatRow(p.channels.length)}
       <div class="chans" id="stChans">${rows}</div>
       <div class="btnrow"><button class="mini" data-st="addch">+ Channel</button>
         <span style="flex:1"></span>
@@ -1485,11 +1488,29 @@ body { padding: 0 !important; margin: 0; }
     return `<h3>Light finder</h3>
       <p>For lights with no manual. Set the light's DMX address, then press <b>Try</b> on each channel: it goes to full while the others go to 0 (channels you've called <b>Dimmer</b> stay up). Write down what the light does by picking it from the list.</p>
       <div class="st-form"><label>Light's address<input type="number" id="stFAddr" min="1" max="512" value="${f.address}"></label>
-        <label>Channels<input type="number" id="stFCount" min="1" max="64" value="${f.roles.length}"></label>
+        <label>Channels<input type="number" id="stFCount" min="1" max="512" value="${f.roles.length}"></label>
         <label>Name it<input type="text" id="stFName" value="${esc(f.name)}" maxlength="40" placeholder="e.g. Wash par"></label></div>
+      ${stRepeatRow(f.roles.length)}
       <div class="chans" id="stFind">${rows}</div>
       <div class="btnrow"><button class="mini" data-st="fall0">All to 0</button><span style="flex:1"></span>
         <button class="btn" data-st="fcancel">Cancel</button><button class="btn primary" data-st="fsave">Save as a kind of light</button></div>`;
+  }
+  // "Repeat CH a to CH b, n times": the block and its copies, one after the other
+  function stRepeatRow(count) {
+    return `<div class="btnrow rep"><span class="label">Repeat</span> CH <input type="number" id="stRepA" min="1" max="${count}" value="1">
+      to CH <input type="number" id="stRepB" min="1" max="${count}" value="${count}">
+      × <input type="number" id="stRepN" min="2" max="128" value="2"> times
+      <button class="mini" data-st="repeat">Repeat</button></div>`;
+  }
+  function stRepeat(list, copy) {
+    const a = Math.max(1, +$("stRepA").value || 1), b = Math.min(list.length, +$("stRepB").value || list.length);
+    const n = Math.max(2, Math.min(128, +$("stRepN").value || 2));
+    if (a > b) { toast("The first channel must come before the last."); return null; }
+    const block = list.slice(a - 1, b), extra = [];
+    for (let k = 1; k < n; k++) block.forEach(x => extra.push(copy(x, k)));
+    const out = [...list.slice(0, b), ...extra, ...list.slice(b)];
+    if (out.length > 512) { toast("That's more than 512 channels."); return null; }
+    return out;
   }
   async function stProbe() {
     const f = ST.finder;
@@ -1580,6 +1601,24 @@ body { padding: 0 !important; margin: 0; }
       if (what === "addch") p.channels.push({ role: "nothing" }); else p.channels.splice(+b.closest(".chrow").dataset.i, 1);
       live.channels = p.channels; live.name = ST.prof; live.kind = p.kind; renderStudio(); $("stPName").value = p.name;
     }
+    else if (what === "repeat") {
+      if (ST.finder) {
+        const f = ST.finder, roles = stRepeat(f.roles, r => r);
+        if (!roles) return;
+        f.roles = roles; f.values = roles.map((_, i) => f.values[i] && i < f.values.length ? f.values[i] : 0);
+        renderStudio(); toast(`${roles.length} channels now.`);
+      } else {
+        const p = stReadProfile(), live = s.rig.profiles.find(x => x.name === ST.prof);
+        // copies of segment channels move on to the next segments
+        const a = +$("stRepA").value || 1, b = +$("stRepB").value || p.channels.length;
+        const segs = p.channels.slice(a - 1, b).map(c => c.segment || 0).filter(Boolean);
+        const span = segs.length ? Math.max(...segs) - Math.min(...segs) + 1 : 0;
+        const chans = stRepeat(p.channels, (c, k) => c.segment ? { role: c.role, segment: c.segment + k * span } : { role: c.role });
+        if (!chans) return;
+        live.channels = chans; live.name = ST.prof; live.kind = p.kind; renderStudio(); $("stPName").value = p.name;
+        toast(`${chans.length} channels now. Press Save to keep them.`);
+      }
+    }
     else if (what === "saveprof") {
       const p = stReadProfile();
       if (await stDo("save_profile", { profile: p, old_name: ST.prof })) { ST.prof = p.name; renderStudio(); toast("Saved. Send to QLC+ (step 3) to use it."); }
@@ -1627,7 +1666,7 @@ body { padding: 0 !important; margin: 0; }
     const f = ST.finder; if (!f) return;
     if (t.id === "stFAddr") { f.address = Math.max(1, Math.min(512, +t.value || 1)); await stProbe(); }
     else if (t.id === "stFCount") {
-      const n = Math.max(1, Math.min(64, +t.value || 1));
+      const n = Math.max(1, Math.min(512, +t.value || 1));
       f.roles = Array.from({ length: n }, (_, i) => f.roles[i] || "nothing");
       f.values = Array.from({ length: n }, (_, i) => f.values[i] || 0);
       renderStudio();

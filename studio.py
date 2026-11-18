@@ -600,7 +600,7 @@ class StudioDesk:
         address = int(address)
         if not 1 <= address <= DMX_CHANNELS:
             raise ValueError("Address must be 1-512.")
-        self._send({address + i: int(v) for i, v in enumerate(values[:64]) if address + i <= DMX_CHANNELS})
+        self._send({address + i: int(v) for i, v in enumerate(values[:DMX_CHANNELS]) if address + i <= DMX_CHANNELS})
 
     def op_release(self):
         self.link.release(0)
