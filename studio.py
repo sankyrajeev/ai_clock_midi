@@ -145,6 +145,36 @@ class Profile:
             "</FixtureDefinition>", ""])
 
 
+def auto_segments(channels: list[Channel]) -> Optional[list[Channel]]:
+    """Work out the segments of an LED bar from repeated channels (what the light
+    finder gives: Dimmer, Amber, Dimmer, Amber ...). The repeats set
+    how many segments there are (the fewest repeats of any repeated role); each
+    repeat starts the next segment. A segment role
+    found once (or once more than the others, first) is for the whole light, like a
+    master dimmer. None if the pattern doesn't add up."""
+    counts: dict[str, int] = {}
+    for c in channels:
+        if c.role in SEGMENT_ROLES:
+            counts[c.role] = counts.get(c.role, 0) + 1
+    k = min((n for n in counts.values() if n >= 2), default=0)
+    if k < 2:
+        return None
+    whole_first = {r for r, n in counts.items() if n == k + 1}
+    if any(n not in (1, k, k + 1) for n in counts.values()):
+        return None
+    seen: dict[str, int] = {}
+    out = []
+    for c in channels:
+        n = counts.get(c.role, 0)
+        if c.role not in SEGMENT_ROLES or n == 1:
+            out.append(Channel(c.role))
+            continue
+        seen[c.role] = seen.get(c.role, 0) + 1
+        i = seen[c.role] - (1 if c.role in whole_first else 0)
+        out.append(Channel(c.role, i if i >= 1 else None))
+    return out
+
+
 # ----------------------------------------------------------------- templates
 def _seg(roles: list[str], segments: int) -> list[Channel]:
     return [Channel(r, s) for s in range(1, segments + 1) for r in roles]
@@ -427,6 +457,12 @@ class StudioDesk:
     def op_save_profile(self, profile: dict, old_name: Optional[str] = None):
         p = Profile.from_json(profile)
         p.name = p.name.strip()
+        if not any(c.segment for c in p.channels) and p.check():
+            segs = auto_segments(p.channels)   # repeated colours: a bar with segments
+            if segs:
+                p.channels = segs
+                if p.kind in ("par", "other"):
+                    p.kind = "bar"
         problems = p.check()
         if problems:
             raise ValueError(problems[0])

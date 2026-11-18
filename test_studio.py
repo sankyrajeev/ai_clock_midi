@@ -222,3 +222,22 @@ def test_desk_asks_before_replacing_a_show_made_in_qlcplus(tmp_path):
     out = desk.handle("apply", replace=True)
     assert out["restarted"] and "<Function" not in desk.show_path.read_text()
     assert "<Function" in Path(out["backup"]).read_text()
+
+
+def test_finder_light_with_repeated_channels_becomes_a_bar_with_segments(tmp_path):
+    desk, _ = make_desk(tmp_path)
+    chans = [{"role": r} for r in ["dimmer", "amber"] * 10]
+    desk.handle("save_profile", profile={"name": "Amber bar", "kind": "par", "channels": chans})
+    p = desk.rig.profiles["Amber bar"]
+    assert p.kind == "bar" and p.segments == 10
+    assert [(c.role, c.segment) for c in p.channels[:4]] == [("dimmer", 1), ("amber", 1), ("dimmer", 2), ("amber", 2)]
+    # a master dimmer and strobe up front, then RGB per segment
+    chans = [{"role": r} for r in ["dimmer", "strobe"] + ["dimmer", "red", "green", "blue"] * 4]
+    desk.handle("save_profile", profile={"name": "RGB bar", "kind": "par", "channels": chans})
+    p = desk.rig.profiles["RGB bar"]
+    assert [(c.role, c.segment) for c in p.channels[:4]] == [("dimmer", None), ("strobe", None), ("dimmer", 1), ("red", 1)]
+    assert p.segments == 4 and not p.check()
+    assert "<Head>" in p.to_qxf()
+    # a pattern that doesn't add up still explains itself
+    with pytest.raises(ValueError, match="appear twice"):
+        desk.handle("save_profile", profile={"name": "Odd", "channels": [{"role": r} for r in ["red", "red", "red", "red", "green", "green"]]})
