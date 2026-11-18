@@ -259,3 +259,38 @@ def test_looks_light_up_single_colour_lights(tmp_path):
     assert link.sent[30] == 255 and link.sent[31] == 90             # and amber-ish
     desk.handle("look", look="off")
     assert not any(link.sent[a] for a in range(1, 21))
+
+
+THEIR_IO = '''<InputOutputMap>
+  <BeatGenerator BeatType="Disabled" BPM="0"/>
+  <Universe Name="Universe 1" ID="0">
+   <Input Plugin="MIDI" UID="Lumiere Cues" Line="1"/>
+   <Output Plugin="ArtNet" Name="2.0.0.1" UID="" Line="2">
+    <PluginParameters UniverseChannels="26" outputIP="2.0.0.1"/>
+   </Output>
+  </Universe>
+  <Universe Name="Universe 2" ID="1"/>
+ </InputOutputMap>'''
+
+
+def test_node_output_replaces_a_wrong_one_and_keeps_inputs():
+    io = st.with_node_output(THEIR_IO, "2.0.0.2")
+    assert io.count("<Output") == 1 and 'Name="2.0.0.2" UID="2.0.0.2"' in io and 'outputIP="2.0.0.10"' in io
+    assert "UniverseChannels" not in io and "2.0.0.1\"" not in io
+    assert '<Input Plugin="MIDI" UID="Lumiere Cues" Line="1"/>' in io
+    assert '<Universe Name="Universe 2" ID="1"/>' in io and "BeatGenerator" in io
+    ET.fromstring(io)
+    for empty in ("", "<InputOutputMap/>", '<InputOutputMap>\n <Universe Name="U" ID="0"/>\n</InputOutputMap>'):
+        io = st.with_node_output(empty, "2.0.0.2")
+        ET.fromstring(io)
+        assert io.count('outputIP="2.0.0.10"') == 1
+
+
+def test_written_show_sends_to_the_node(tmp_path):
+    rig = rig_with_bars_and_pars()
+    show = tmp_path / "show.qxw"
+    show.write_text(f"<Workspace><Engine>{THEIR_IO}</Engine></Workspace>")
+    out = st.write_show(rig, show, tmp_path / "fx", local_ip="2.0.0.2")
+    text = show.read_text()
+    assert out["node_output"] == "2.0.0.2 → 2.0.0.10" and 'outputIP="2.0.0.10"' in text and "Lumiere Cues" in text
+    ET.fromstring(text.split("\n", 2)[2])   # still well-formed after the DOCTYPE

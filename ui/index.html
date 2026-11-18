@@ -1538,7 +1538,7 @@ body { padding: 0 !important; margin: 0; }
     const targets = [["all", "All lights"], ...s.groups.map(g => ["g:" + g, g])];
     const ap = ST.applied;
     const applied = ap ? (ap.restarted
-        ? `<div class="st-note ok"><b>Sent.</b> QLC+ restarted with ${s.rig.lights.length} lights and the light files ${esc(ap.fixtures.join(", "))}. ${ap.kept_io ? "Its outputs (Art-Net to the Node) were kept." : "<b>Set QLC+'s output to Art-Net, IP 2.0.0.10</b>: the show didn't have one yet."}${ap.backup ? ` The old show is saved as ${esc(ap.backup.split("/").pop())}.` : ""}</div>`
+        ? `<div class="st-note ok"><b>Sent.</b> QLC+ restarted with ${s.rig.lights.length} lights and the light files ${esc(ap.fixtures.join(", "))}. ${ap.node_output ? `Art-Net goes to the Node (${esc(ap.node_output)}), all 512 channels.` : "<b>The Node (2.0.0.10) isn't reachable from here</b>: set QLC+'s output to Art-Net, IP 2.0.0.10 by hand."}${ap.backup ? ` The old show is saved as ${esc(ap.backup.split("/").pop())}.` : ""}</div>`
         : `<div class="st-note warn"><b>Written.</b> ${esc(ap.note || "")}</div>`) : "";
     return `<div class="well st-pane">
       <h3>Test the rig</h3>

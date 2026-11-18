@@ -329,7 +329,43 @@ def io_map_of(show_xml: str) -> str:
     return m.group(0) if m else ""
 
 
-def write_show(rig: Rig, show_path: Path, fixtures_dir: Path) -> dict:
+NODE_IP = "2.0.0.10"       # the Lumière Node: Art-Net in, DMX out
+
+
+def local_ip_for(target: str) -> Optional[str]:
+    """This computer's address on the network that reaches `target` (no packet is
+    sent: the system just picks the route)."""
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect((target, 6454))
+            ip = s.getsockname()[0]
+    except OSError:
+        return None
+    return None if ip.startswith("127.") or ip == "0.0.0.0" else ip
+
+
+def with_node_output(io_map: str, local_ip: str, node_ip: str = NODE_IP) -> str:
+    """The show's <InputOutputMap> with universe 1 sending Art-Net to the Node from
+    `local_ip` (QLC+ finds the network port by its address), all 512 channels.
+    Other universes and every input (MIDI from Lumière Link) are kept."""
+    out = (f'<Output Plugin="ArtNet" Name="{local_ip}" UID="{local_ip}" Line="0">\n'
+           f'     <PluginParameters outputIP="{node_ip}"/>\n    </Output>')
+    if not io_map:
+        io_map = "<InputOutputMap>\n </InputOutputMap>"
+    if io_map.endswith("/>"):
+        io_map = io_map[:-2].rstrip() + ">\n </InputOutputMap>"
+    m = re.search(r'<Universe\b[^>]*\bID="0"[^>]*?(/>|>(.*?)</Universe>)', io_map, re.S)
+    if not m:
+        uni = f'<Universe Name="Universe 1" ID="0">\n    {out}\n   </Universe>'
+        return io_map.replace("</InputOutputMap>", f"  {uni}\n </InputOutputMap>", 1)
+    head = re.match(r"<Universe\b[^>]*?(?=/?>)", m.group(0)).group(0)
+    inner = re.sub(r"<Output\b[^>]*/>|<Output\b[^>]*[^/]>.*?</Output>", "", m.group(2) or "", flags=re.S)
+    inner = re.sub(r"\n\s*\n", "\n", inner).rstrip()
+    return io_map[:m.start()] + f"{head}>{inner}\n    {out}\n   </Universe>" + io_map[m.end():]
+
+
+def write_show(rig: Rig, show_path: Path, fixtures_dir: Path, local_ip: Optional[str] = None) -> dict:
     """Write the fixture definitions and the show for QLC+, keeping the current
     show's inputs and outputs and a backup of it. Returns what was written."""
     show_path, fixtures_dir = Path(show_path), Path(fixtures_dir)
@@ -348,12 +384,16 @@ def write_show(rig: Rig, show_path: Path, fixtures_dir: Path) -> dict:
         io_map = io_map_of(old)
         backup = show_path.with_name(f"{show_path.stem}-before-studio-{time.strftime('%Y%m%d-%H%M%S')}.qxw")
         shutil.copy2(show_path, backup)
+    kept_io = bool(io_map)
+    local_ip = local_ip or local_ip_for(NODE_IP)
+    if local_ip:   # always send to the Node through the port that reaches it
+        io_map = with_node_output(io_map, local_ip)
     show_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = show_path.with_suffix(".tmp")
     tmp.write_text(rig.to_qxw(io_map))
     tmp.replace(show_path)
     return {"fixtures": written, "show": str(show_path), "backup": str(backup) if backup else None,
-            "kept_io": bool(io_map)}
+            "kept_io": kept_io, "node_output": f"{local_ip} → {NODE_IP}" if local_ip else None}
 
 
 def load_rig(path: Path) -> Rig:
