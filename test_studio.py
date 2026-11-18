@@ -304,3 +304,20 @@ def test_look_on_picked_lights_only(tmp_path):
     assert [link.sent[a] for a in (1, 4, 7)] == [255, 0, 255]
     desk.handle("look", look="blue", lights=[])
     assert not any(link.sent.values())
+
+
+def test_ring_light_with_several_effect_channels(tmp_path):
+    """A 15-channel ring light: master dimmer, strobe, centre beam dimmer, outer and
+    middle RGB rings, then its own effect programs and speeds."""
+    roles = [("dimmer", None), ("strobe", None), ("dimmer", 3), ("red", 1), ("green", 1), ("blue", 1),
+             ("red", 2), ("green", 2), ("blue", 2), ("mode", None), ("speed", None), ("mode", None),
+             ("mode", None), ("mode", None), ("speed", None)]
+    p = st.Profile.from_json({"name": "Ring light", "kind": "par",
+                              "channels": [{"role": r, **({"segment": s} if s else {})} for r, s in roles]})
+    assert not p.check() and p.segments == 3
+    qxf = p.to_qxf()
+    names = [c.get("Name") for c in ET.fromstring(qxf).iter(FX + "Channel") if c.get("Name")]
+    assert len(names) == len(set(names)) == 15 and "Mode / programs (CH 12)" in names
+    if XSD.exists() and shutil.which("xmllint"):
+        f = tmp_path / "ring.qxf"; f.write_text(qxf)
+        assert subprocess.run(["xmllint", "--noout", "--schema", str(XSD), str(f)], capture_output=True).returncode == 0

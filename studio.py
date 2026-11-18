@@ -44,6 +44,8 @@ ROLES = {
     "gobo": ("Gobo", None, "Gobo"),
     "nothing": ("Nothing", None, "Nothing"),
 }
+# Roles a light can have several of (its own effect programs, their speeds)
+REPEATABLE = ("mode", "speed", "nothing")
 # Roles that make up a segment (a "head") of a multi-segment light
 SEGMENT_ROLES = ("dimmer", "red", "green", "blue", "white", "amber", "uv")
 KINDS = {"par": "Color Changer", "bar": "LED Bar (Pixels)", "strobe": "Strobe",
@@ -87,7 +89,9 @@ class Profile:
         for i, c in enumerate(self.channels, 1):
             if c.role not in ROLES:
                 problems.append(f"Channel {i}: unknown role {c.role!r}")
-        labels = [c.label for c in self.channels if c.role != "nothing"]
+        # colours and dimmers must be unique (per segment); a light can have any
+        # number of effect-program, speed or unused channels
+        labels = [c.label for c in self.channels if c.role not in REPEATABLE]
         dupes = sorted({x for x in labels if labels.count(x) > 1})
         if dupes:
             problems.append("These appear twice: " + ", ".join(dupes))
@@ -110,7 +114,10 @@ class Profile:
         """The profile as a QLC+ fixture definition."""
         names, out = [], []
         for i, c in enumerate(self.channels):
+            # QLC+ needs every channel name in a light to be different
             name = c.label if c.role != "nothing" else f"Unused {i + 1}"
+            if c.role in REPEATABLE and sum(1 for x in self.channels if x.role == c.role and not x.segment) > 1:
+                name = f"{c.label} (CH {i + 1})"
             names.append(name)
             _, preset, group = ROLES[c.role]
             if c.role == "dimmer" and c.segment:
