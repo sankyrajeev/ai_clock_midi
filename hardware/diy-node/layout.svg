@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" font-family="Helvetica, Arial, sans-serif">
+<defs>
+ <pattern id="holes" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="6" cy="6" r="1.6" fill="#b8a46a"/></pattern>
+</defs>
+<rect width="1600" height="1080" fill="#ffffff"/>
+<text x="60" y="58" font-size="30" font-weight="700" fill="#1b1b1b">DIY Art-Net → DMX box: perfboard layout</text>
+<text x="60" y="88" font-size="17" fill="#555">7 × 9 cm perfboard · modules plug into soldered female headers · every outside wire goes to a screw terminal</text>
+
+<!-- perfboard -->
+<rect x="80" y="120" width="780" height="580" rx="10" fill="#2f6b3f"/>
+<rect x="88" y="128" width="764" height="564" rx="6" fill="url(#holes)"/>
+<text x="845" y="146" font-size="14" text-anchor="end" fill="#cfe6d2">PERFBOARD 7 × 9 cm</text>
+
+<!-- WT32 -->
+<rect x="120" y="165" width="330" height="175" rx="6" fill="#1d1d1d" stroke="#000"/>
+<rect x="64" y="200" width="70" height="80" rx="4" fill="#9a9a9a" stroke="#555"/>
+<text x="99" y="245" font-size="13" text-anchor="middle" fill="#222">RJ45</text>
+<text x="230" y="200" font-size="20" font-weight="700" text-anchor="middle" fill="#fff">WT32-ETH01</text>
+<text x="230" y="224" font-size="13" text-anchor="middle" fill="#bbb">in female headers</text>
+<text x="230" y="244" font-size="13" text-anchor="middle" fill="#bbb">RJ45 faces the case back</text>
+<g font-size="13" fill="#fff" text-anchor="end">
+ <text x="440" y="199">5V</text><text x="440" y="219">GND</text><text x="440" y="239">IO17 (TXD)</text><text x="440" y="259">IO33 (485_EN)</text>
+</g>
+<g font-size="13" fill="#fff" text-anchor="middle"><text x="300" y="330">IO14</text><text x="380" y="330">IO4</text></g>
+
+<!-- MAX485 -->
+<rect x="520" y="165" width="270" height="130" rx="6" fill="#1f4fa0" stroke="#0c2a5c"/>
+<text x="700" y="198" font-size="18" font-weight="700" text-anchor="middle" fill="#fff">MAX485</text>
+<text x="700" y="218" font-size="13" text-anchor="middle" fill="#cfdcf5">in female headers</text>
+<g font-size="13" fill="#fff"><text x="530" y="199">VCC</text><text x="530" y="219">GND</text><text x="530" y="239">DI</text><text x="590" y="259">DE</text><text x="590" y="279">RE</text></g>
+<g font-size="13" fill="#fff" text-anchor="end"><text x="780" y="214">A</text><text x="780" y="254">B</text></g>
+
+<!-- wires: 5V red -->
+<g fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+ <path d="M450 195 H520" stroke="#d62828"/>
+ <path d="M150 650 V420 H480 V195" stroke="#d62828"/>
+ <!-- GND black -->
+ <path d="M450 215 H520" stroke="#111"/>
+ <path d="M190 650 V600 H740 V650" stroke="#111"/>
+ <path d="M340 600 V650" stroke="#111"/><path d="M420 600 V650" stroke="#111"/>
+ <path d="M500 600 V215" stroke="#111"/>
+ <!-- IO17 blue -->
+ <path d="M450 235 H520" stroke="#1e88e5"/>
+ <!-- IO33 orange to DE and RE (bridged) -->
+ <path d="M450 255 H585" stroke="#f57c00"/>
+ <path d="M572 255 V275 H585" stroke="#f57c00"/>
+ <!-- IO14 yellow -->
+ <path d="M300 340 V650" stroke="#f2c200"/>
+ <!-- IO4 purple via resistor -->
+ <path d="M380 340 V470" stroke="#8e24aa"/><path d="M380 530 V650" stroke="#8e24aa"/>
+ <!-- A green, B teal -->
+ <path d="M790 210 H815 V560 H640 V650" stroke="#2e9d4a"/>
+ <path d="M790 250 H835 V578 H690 V650" stroke="#00897b"/>
+ <!-- capacitor leads -->
+ <path d="M240 420 V488" stroke="#d62828"/><path d="M240 532 V600" stroke="#111"/>
+</g>
+<!-- junction dots -->
+<g fill="#111"><circle cx="500" cy="215" r="6"/><circle cx="340" cy="600" r="6"/><circle cx="420" cy="600" r="6"/><circle cx="240" cy="600" r="6"/><circle cx="500" cy="600" r="6"/></g>
+<g fill="#d62828"><circle cx="480" cy="195" r="6"/><circle cx="240" cy="420" r="6"/></g>
+<circle cx="572" cy="255" r="6" fill="#f57c00"/>
+<!-- resistor -->
+<rect x="368" y="470" width="24" height="60" rx="5" fill="#e8d3a0" stroke="#7a6230" stroke-width="2"/>
+<g stroke-width="4"><line x1="368" y1="483" x2="392" y2="483" stroke="#d62828"/><line x1="368" y1="495" x2="392" y2="495" stroke="#d62828"/><line x1="368" y1="507" x2="392" y2="507" stroke="#8b4513"/></g>
+<text x="400" y="505" font-size="13" fill="#fff">220 Ω</text>
+<!-- capacitor -->
+<rect x="222" y="488" width="36" height="44" rx="6" fill="#203a8c" stroke="#0e1d47" stroke-width="2"/>
+<text x="240" y="515" font-size="11" text-anchor="middle" fill="#fff">470µF</text>
+<text x="196" y="480" font-size="13" fill="#fff">+ to 5V</text>
+
+<!-- terminals -->
+<g>
+ <rect x="128" y="640" width="84" height="40" rx="4" fill="#2aa36b" stroke="#145a3a"/>
+ <rect x="282" y="640" width="76" height="40" rx="4" fill="#2aa36b" stroke="#145a3a"/>
+ <rect x="362" y="640" width="76" height="40" rx="4" fill="#2aa36b" stroke="#145a3a"/>
+ <rect x="620" y="640" width="140" height="40" rx="4" fill="#2aa36b" stroke="#145a3a"/>
+ <g fill="#cfd8dc" stroke="#555"><circle cx="150" cy="660" r="9"/><circle cx="190" cy="660" r="9"/><circle cx="300" cy="660" r="9"/><circle cx="340" cy="660" r="9"/><circle cx="380" cy="660" r="9"/><circle cx="420" cy="660" r="9"/><circle cx="640" cy="660" r="9"/><circle cx="690" cy="660" r="9"/><circle cx="740" cy="660" r="9"/></g>
+</g>
+
+<!-- off board -->
+<g font-size="15" font-weight="700" fill="#222">
+ <text x="140" y="760" text-anchor="end">POWER</text><text x="290" y="760" text-anchor="end">BUTTON</text><text x="430" y="760">LED</text><text x="752" y="760">DMX OUT</text>
+</g>
+<g fill="none" stroke-width="5" stroke-linecap="round">
+ <path d="M150 670 V820" stroke="#d62828"/><path d="M190 670 V820" stroke="#111"/>
+ <path d="M300 670 V840" stroke="#f2c200"/><path d="M340 670 V840" stroke="#111"/>
+ <path d="M380 670 V830" stroke="#8e24aa"/><path d="M420 670 V830" stroke="#111"/>
+ <path d="M640 670 V800 H655 V876" stroke="#2e9d4a"/><path d="M690 670 V815 H725 V876" stroke="#00897b"/><path d="M740 670 V790 H775 V972 H690 V933" stroke="#111"/>
+</g>
+<rect x="120" y="820" width="100" height="70" rx="8" fill="#444"/><rect x="146" y="868" width="48" height="16" rx="6" fill="#aaa"/>
+<text x="170" y="850" font-size="13" text-anchor="middle" fill="#fff">USB-C board</text>
+<text x="146" y="815" font-size="12" text-anchor="end" fill="#d62828">VBUS</text><text x="196" y="815" font-size="12" fill="#111">GND</text>
+<circle cx="320" cy="872" r="30" fill="#c62828" stroke="#7f1515" stroke-width="3"/><text x="300" y="950" font-size="13" text-anchor="middle" fill="#333">16 mm button</text>
+<circle cx="400" cy="860" r="18" fill="#ffb300" stroke="#b37a00" stroke-width="3"/>
+<text x="400" y="902" font-size="13" text-anchor="middle" fill="#333">amber LED</text><text x="400" y="920" font-size="13" text-anchor="middle" fill="#8e24aa">long leg (+) to purple</text>
+<circle cx="690" cy="900" r="48" fill="#d9d9d9" stroke="#666" stroke-width="3"/>
+<g fill="#333"><circle cx="655" cy="884" r="7"/><circle cx="725" cy="884" r="7"/><circle cx="690" cy="925" r="7"/></g>
+<text x="690" y="1000" font-size="13" text-anchor="middle" fill="#333">XLR female socket: use the pin numbers moulded on it</text>
+<text x="640" y="888" font-size="13" text-anchor="end" fill="#2e9d4a">pin 3 (A, Data +)</text>
+<text x="784" y="888" font-size="13" fill="#00897b">pin 2 (B, Data −)</text>
+<text x="640" y="944" font-size="13" text-anchor="end" fill="#111">pin 1 (GND)</text>
+<text x="80" y="1030" font-size="13" fill="#888">Check the pin numbers moulded next to the XLR's solder cups: pin 1 = GND, pin 2 = B, pin 3 = A.</text>
+
+<!-- right panel -->
+<g font-size="16" fill="#222">
+ <text x="920" y="140" font-size="22" font-weight="700">The wires</text>
+ <rect x="920" y="160" width="26" height="8" fill="#d62828"/><text x="960" y="170">5V: USB-C VBUS → WT32 5V, MAX485 VCC, capacitor +</text>
+ <rect x="920" y="190" width="26" height="8" fill="#111"/><text x="960" y="200">GND: one rail to everything with GND, XLR pin 1</text>
+ <rect x="920" y="220" width="26" height="8" fill="#1e88e5"/><text x="960" y="230">WT32 IO17 (TXD) → MAX485 DI</text>
+ <rect x="920" y="250" width="26" height="8" fill="#f57c00"/><text x="960" y="260">WT32 IO33 → MAX485 DE + RE (bridged)</text>
+ <rect x="920" y="280" width="26" height="8" fill="#2e9d4a"/><text x="960" y="290">MAX485 A → XLR pin 3</text>
+ <rect x="920" y="310" width="26" height="8" fill="#00897b"/><text x="960" y="320">MAX485 B → XLR pin 2</text>
+ <rect x="920" y="340" width="26" height="8" fill="#8e24aa"/><text x="960" y="350">WT32 IO4 → 220 Ω → LED + (long leg); LED − → GND</text>
+ <rect x="920" y="370" width="26" height="8" fill="#f2c200"/><text x="960" y="380">WT32 IO14 → button → GND</text>
+
+ <text x="920" y="440" font-size="22" font-weight="700">Order of work</text>
+ <text x="920" y="472">1. Solder the female headers where each module's pins land.</text>
+ <text x="920" y="500">2. Solder the screw terminals at the board edge.</text>
+ <text x="920" y="528">3. Lay the GND rail and the 5V line first (thick, short).</text>
+ <text x="920" y="556">4. Add the signal wires, the resistor and the capacitor.</text>
+ <text x="920" y="584">5. Modules OUT: multimeter on beep, 5V to GND must</text>
+ <text x="940" y="608">NOT beep. Then plug the modules in.</text>
+ <text x="920" y="636">6. Outside parts: solder short wires to the XLR, button,</text>
+ <text x="940" y="660">LED and USB-C board; screw them into the terminals.</text>
+
+ <text x="920" y="720" font-size="22" font-weight="700">Watch out</text>
+ <text x="920" y="752">• Leave WT32 IO0 unconnected: it carries the network clock.</text>
+ <text x="920" y="780">• Fit the 470 µF capacitor (+ to 5V): without it the box can</text>
+ <text x="940" y="804">reset when the network chip starts.</text>
+ <text x="920" y="832">• Pins sit differently on each seller's boards: follow the</text>
+ <text x="940" y="856">names printed on yours, not this drawing's order.</text>
+</g>
+</svg>
