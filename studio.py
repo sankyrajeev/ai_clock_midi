@@ -576,12 +576,18 @@ class StudioDesk:
             out["note"] = f"Close QLC+ and open {self.show_path} again: QLC+ only reads new lights when it starts."
         return out
 
-    def op_look(self, look: str, light=None, group: Optional[str] = None):
+    def op_look(self, look: str, light=None, group: Optional[str] = None, lights: Optional[list] = None):
+        """A test look on all lights, one group, one light or a chosen few (`lights`:
+        ids); every other light goes off."""
         if look not in LOOKS:
             raise ValueError("unknown look")
         values = self.rig.channels_for({}, None)   # everything to 0 first
-        targets = ([self._light(light)] if light is not None else
-                   self.rig.groups().get(group, []) if group else self.rig.lights)
+        if lights is not None:
+            targets = [l for l in self.rig.lights if l.id in {int(i) for i in lights}]
+        elif light is not None:
+            targets = [self._light(light)]
+        else:
+            targets = self.rig.groups().get(group, []) if group else self.rig.lights
         for l in targets:
             roles = LOOKS[look]
             has = {c.role for c in self.rig.profiles[l.profile].channels}

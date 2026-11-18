@@ -294,3 +294,13 @@ def test_written_show_sends_to_the_node(tmp_path):
     text = show.read_text()
     assert out["node_output"] == "2.0.0.2 → 2.0.0.10" and 'outputIP="2.0.0.10"' in text and "Lumiere Cues" in text
     ET.fromstring(text.split("\n", 2)[2])   # still well-formed after the DOCTYPE
+
+
+def test_look_on_picked_lights_only(tmp_path):
+    desk, link = make_desk(tmp_path)
+    desk.handle("new_profile", template="rgb3", name="RGB")
+    desk.handle("add_lights", name="P", profile="RGB", count=3)        # 1, 4, 7
+    desk.handle("look", look="red", lights=[0, 2])
+    assert [link.sent[a] for a in (1, 4, 7)] == [255, 0, 255]
+    desk.handle("look", look="blue", lights=[])
+    assert not any(link.sent.values())

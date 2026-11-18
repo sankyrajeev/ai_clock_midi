@@ -1512,6 +1512,17 @@ body { padding: 0 !important; margin: 0; }
     if (out.length > 512) { toast("That's more than 512 channels."); return null; }
     return out;
   }
+  // Which lights the test looks go to: all, a group, or the ones picked by hand
+  function stSelected() {
+    const lights = ST.s.rig.lights;
+    if (ST.target === "pick" && ST.picked) return new Set(ST.picked);
+    if (ST.target.startsWith("g:")) return new Set(lights.filter(l => l.group === ST.target.slice(2)).map(l => l.id));
+    return new Set(lights.map(l => l.id));
+  }
+  async function stApplyLook() {   // re-send the current look when the choice of lights changes
+    if (!ST.look) return;
+    await stDo("look", { look: ST.look, lights: [...stSelected()] });
+  }
   async function stProbe() {
     const f = ST.finder;
     await stDo("probe", { address: f.address, values: f.values });
@@ -1565,10 +1576,12 @@ body { padding: 0 !important; margin: 0; }
       <h3>Test the rig</h3>
       <p>These go straight to the lights through QLC+, so you can check the patch before the show. <b>Give the lights back to the show</b> when you're done.</p>
       <div class="btnrow">${targets.map(([k, l]) => `<button class="mini${ST.target === k ? " on" : ""}" data-st="target" data-k="${esc(k)}">${esc(l)}</button>`).join("")}</div>
+      ${s.rig.lights.length ? `<div class="btnrow"><span class="label">Or pick lights</span>${[...s.rig.lights].sort((a, b) => a.address - b.address).map(l =>
+        `<button class="mini${stSelected().has(l.id) ? " on" : ""}" data-st="pick" data-id="${l.id}" title="${esc(l.group)} · address ${l.address}">${esc(l.name)}</button>`).join("")}</div>` : ""}
       <div class="looks">${s.looks.map(k => `<button class="look${ST.look === k ? " on" : ""}" data-st="look" data-k="${k}"><span class="sw" style="--c:${LOOK_COLOURS[k] || "#888"}"></span>${k === "uv" ? "UV" : k[0].toUpperCase() + k.slice(1)}</button>`).join("")}</div>
       ${s.qlc ? "" : `<div class="st-note warn"><b>QLC+ isn't answering.</b> Studio talks to QLC+ through its web page: start it with <b>--web</b> (the Resident does this already).</div>`}
       <h3 style="margin-top:8px">Send to QLC+</h3>
-      <p>Writes a light file for each kind of light and patches every light in QLC+'s show (${esc(s.show)}), with a fixture group for each group. The show's outputs are kept, and the old show is saved first. On the Resident, QLC+ restarts by itself with the new patch.</p>
+      <p>Writes a light file for each kind of light and patches every light in QLC+'s show (${esc(s.show)}), with a fixture group for each group. Art-Net is set to go to the Node (2.0.0.10), and the old show is saved first. On the Resident, QLC+ restarts by itself with the new patch.</p>
       ${applied}
     </div>`;
   }
@@ -1645,12 +1658,13 @@ body { padding: 0 !important; margin: 0; }
     }
     else if (what === "rmlight") { if (await stDo("remove_light", { id: +b.closest("tr").dataset.id })) renderStudio(); }
     else if (what === "ident") { await stDo("identify", { light: +b.closest("tr").dataset.id }); renderStudio(); toast("That light is on full white; the others are off."); }
-    else if (what === "target") { ST.target = b.dataset.k; renderStudio(); }
-    else if (what === "look") {
-      ST.look = b.dataset.k;
-      const args = { look: ST.look }; if (ST.target.startsWith("g:")) args.group = ST.target.slice(2);
-      await stDo("look", args); renderStudio();
+    else if (what === "target") { ST.target = b.dataset.k; ST.picked = null; renderStudio(); await stApplyLook(); }
+    else if (what === "pick") {
+      const sel = stSelected(), id = +b.dataset.id;
+      sel.has(id) ? sel.delete(id) : sel.add(id);
+      ST.picked = sel; ST.target = "pick"; renderStudio(); await stApplyLook();
     }
+    else if (what === "look") { ST.look = b.dataset.k; await stApplyLook(); renderStudio(); }
   });
   $("stBody").addEventListener("change", async e => {
     const t = e.target;
