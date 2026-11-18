@@ -61,3 +61,11 @@ systemctl status lumiere-link lumiere-qlcplus lumiere-display lumiere-vnc
 journalctl -u lumiere-link -f        # live log, Ctrl+C to leave
 cat ~/.config/lumiere-link/screen-link.txt
 ```
+
+## Open-source licenses
+
+The Resident ships open-source software (QLC+, Qt, FFTW, Raspberry Pi OS ...).
+`resident/licenses/THIRD-PARTY-NOTICES.md` lists it with its licenses; the
+installer copies it, the license texts and the exact QLC+ source code to
+`~/Lumiere/Licenses` on the Pi (`bash resident/licenses/install-notices.sh` does
+it on its own). Fill in the contact email in the notices before selling boxes.

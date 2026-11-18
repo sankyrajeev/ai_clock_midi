@@ -33,6 +33,8 @@ else
     # The virtual screen QLC+ 5 draws on, and Screen Sharing (VNC) to see it from the Mac
     sudo apt-get install -y -q xvfb x11vnc matchbox-window-manager libgl1-mesa-dri
     bash "$REPO/resident/build-qlcplus5.sh"
+    # open-source notices and the exact QLC+ source, kept on the box
+    bash "$REPO/resident/licenses/install-notices.sh"
     if [ ! -s "$HOME/.vnc/passwd" ]; then
         echo
         echo "Choose a password for Screen Sharing (seeing QLC+ on the Pi from the Mac), 8 characters at most:"
