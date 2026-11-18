@@ -62,5 +62,40 @@ Add each **kind** of light once (not each light).
 
 QLC+ must run with its web page on (`--web`); the Resident does this already.
 
-Coming next: looks and chases made from your groups, LED-bar effects, strobe on the
-beat, and auto play driven by the music.
+## 4 · Show: the lights play by themselves
+
+For each kind of section (intro, verse, build, pre-drop, drop, breakdown, bridge,
+outro) choose what plays. **Fill from my lights** makes a whole show from the
+colours your lights can make; change it with **+ Add…** and **✕**.
+
+| Effect | What it does | Speed |
+|---|---|---|
+| Solid | one colour on everything | – |
+| Pulse | fades between full and low | 2 beats each way |
+| Chase | one light (or bar segment) at a time, along each group | an 8th note a step |
+| Bounce | a chase that goes back and forth | an 8th note a step |
+| Alternate | every other light/segment in two colours, swapping | every beat |
+| Fill | lights fill up along each group | an 8th note a step |
+| Strobe | on/off | 10 flashes a second |
+
+Plus, before the drop: **Hit flash** (white on every hit), **Snare roll strobe**
+(from the start of the roll to the drop) and **Blackout** (the gap before the drop;
+its length is set in Sequences → Drop).
+
+Press **Send to QLC+**. Studio writes every effect into the QLC+ show with a button
+for each, already wired to the note Lumière Link sends for it, sets QLC+'s MIDI
+inputs, and sets Lumière Link's pools to match. Nothing to map by hand. After
+sending, **▶** previews an effect on the lights.
+
+How it plays:
+- When a section starts, Lumière Link picks one of its effects (shuffled, never the
+  same one twice in a row) and QLC+ starts it, stopping the one before.
+- The beat: Lumière Link sends QLC+ its own clock, **Lumiere Studio Clock**, at
+  double speed, so QLC+'s chases can step on 8th notes, locked to the DJ.
+- A section with nothing chosen keeps the last look.
+
+On the Resident, QLC+ starts once Lumière Link's MIDI ports are there and
+restarts whenever Lumière Link does (QLC+ only finds MIDI ports when it starts).
+
+Studio's show runs on the Resident (Linux). On a Mac, QLC+ gets no double-speed
+clock, so its chases won't move.

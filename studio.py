@@ -219,10 +219,12 @@ class Rig:
     """The venue's lights: profiles (kinds of light) and the patch."""
     profiles: dict[str, Profile] = field(default_factory=dict)
     lights: list[Light] = field(default_factory=list)
+    # the show (studio_show.py): {"pools": {"drop": ["chase:amber", ...]}, "hit": True, ...}
+    show: dict = field(default_factory=dict)
 
     def to_json(self) -> dict:
         return {"profiles": [p.to_json() for p in self.profiles.values()],
-                "lights": [asdict(l) for l in self.lights]}
+                "lights": [asdict(l) for l in self.lights], "show": self.show}
 
     @classmethod
     def from_json(cls, data: dict) -> "Rig":
@@ -231,6 +233,7 @@ class Rig:
             prof = Profile.from_json(p)
             rig.profiles[prof.name] = prof
         rig.lights = [Light(**l) for l in (data or {}).get("lights", [])]
+        rig.show = dict((data or {}).get("show") or {})
         return rig
 
     def span(self, light: Light) -> range:
@@ -286,7 +289,7 @@ class Rig:
         return out
 
     # -- QLC+ show
-    def to_qxw(self, io_map: str = "") -> str:
+    def to_qxw(self, io_map: str = "", functions: str = "", console: str = "") -> str:
         """The QLC+ show with every light patched and a fixture group per group. The
         show's inputs and outputs (`io_map`, the <InputOutputMap> of the current show)
         are kept as they were set up on this machine."""
@@ -310,7 +313,12 @@ class Rig:
                     x += 1
             lines.append(f'  <FixtureGroup ID="{gid}">\n   <Name>{escape(group)}</Name>\n'
                          f'   <Size X="{max(1, x)}" Y="1"/>\n' + "\n".join(heads) + "\n  </FixtureGroup>")
-        lines += [" </Engine>", "</Workspace>", ""]
+        if functions:
+            lines.append(functions)
+        lines.append(" </Engine>")
+        if console:
+            lines.append(console)
+        lines += ["</Workspace>", ""]
         return "\n".join(lines)
 
     def channels_for(self, roles: dict[str, int], light: Optional[Light] = None) -> dict[int, int]:
@@ -366,6 +374,7 @@ def with_node_output(io_map: str, local_ip: str, node_ip: str = NODE_IP) -> str:
 
 
 def write_show(rig: Rig, show_path: Path, fixtures_dir: Path, local_ip: Optional[str] = None) -> dict:
+    import studio_show as sh
     """Write the fixture definitions and the show for QLC+, keeping the current
     show's inputs and outputs and a backup of it. Returns what was written."""
     show_path, fixtures_dir = Path(show_path), Path(fixtures_dir)
@@ -388,12 +397,17 @@ def write_show(rig: Rig, show_path: Path, fixtures_dir: Path, local_ip: Optional
     local_ip = local_ip or local_ip_for(NODE_IP)
     if local_ip:   # always send to the Node through the port that reaches it
         io_map = with_node_output(io_map, local_ip)
+    built = None
+    if rig.lights and (sh.slots(rig.show) or rig.show.get("hit") or rig.show.get("roll")):
+        built = sh.build(rig, rig.show)
+        io_map = sh.with_lumiere_inputs(io_map)   # MIDI from Lumière Link, beat from its clock
     show_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = show_path.with_suffix(".tmp")
-    tmp.write_text(rig.to_qxw(io_map))
+    tmp.write_text(rig.to_qxw(io_map, built.functions if built else "", built.console if built else ""))
     tmp.replace(show_path)
     return {"fixtures": written, "show": str(show_path), "backup": str(backup) if backup else None,
-            "kept_io": kept_io, "node_output": f"{local_ip} → {NODE_IP}" if local_ip else None}
+            "kept_io": kept_io, "node_output": f"{local_ip} → {NODE_IP}" if local_ip else None,
+            "ids": built.ids if built else {}, "counts": built.counts if built else {}}
 
 
 def load_rig(path: Path) -> Rig:
@@ -441,7 +455,7 @@ class StudioDesk:
     drives QLC+'s Simple Desk for test looks and the light finder."""
 
     def __init__(self, data_dir: Path, link=None, show_path: Optional[Path] = None,
-                 fixtures_dir: Optional[Path] = None, restart=None):
+                 fixtures_dir: Optional[Path] = None, restart=None, set_pools=None):
         from qlclink import QlcLink, qlcplus_service_active, restart_qlcplus
         self.path = Path(data_dir) / "studio-rig.json"
         self.rig = load_rig(self.path)
@@ -452,6 +466,9 @@ class StudioDesk:
         # laptop that would just close it
         self.restart = restart or (lambda: qlcplus_service_active() and restart_qlcplus())
         self.testing = False
+        # tells Lumière Link how many slots each pool has (engine.py)
+        self.set_pools = set_pools
+        self.applied: dict = {}   # what each slot plays in QLC+ since the last Send
 
     def _save(self) -> None:
         save_rig(self.rig, self.path)
@@ -476,7 +493,49 @@ class StudioDesk:
         "show_name": self.show_path.name,
             "qlc": self.link.running(),
             "testing": self.testing,
+            "show": self._show_state(),
         }
+
+    # -- the show (studio_show.py)
+    def _show_state(self) -> dict:
+        import studio_show as sh
+        if not self.rig.lights:
+            return {"ready": False}
+        show = self.rig.show
+        return {"ready": True, "pools": show.get("pools") or {}, "slots": sh.slots(show),
+                "hit": show.get("hit", True), "roll": show.get("roll", True), "blackout": show.get("blackout", True),
+                "gallery": sh.gallery(self.rig), "palette": sh.palette(self.rig),
+                "labels": sh.POOL_LABELS, "order": list(sh.POOL_LABELS),
+                "applied": self.applied}
+
+    def op_auto_fill(self):
+        import studio_show as sh
+        if not self.rig.lights:
+            raise ValueError("Patch your lights first (step 2).")
+        self.rig.show = {**self.rig.show, "pools": sh.auto_fill(self.rig)}
+        self._save()
+
+    def op_set_pool(self, pool: str, keys: list):
+        import studio_show as sh
+        if pool not in sh.POOL_CHANNELS:
+            raise ValueError("unknown section")
+        known = {g["key"] for g in sh.gallery(self.rig)}
+        keys = [k for k in keys if k in known][:sh.MAX_SLOTS]
+        self.rig.show = {**self.rig.show, "pools": {**(self.rig.show.get("pools") or {}), pool: keys}}
+        self._save()
+
+    def op_set_extra(self, name: str, on: bool):
+        if name not in ("hit", "roll", "blackout"):
+            raise ValueError("unknown option")
+        self.rig.show = {**self.rig.show, name: bool(on)}
+        self._save()
+
+    def op_play(self, fid: int, on: bool = True):
+        """Start (or stop) one of the show's effects in QLC+, to preview it."""
+        try:
+            self.link.send(f"QLC+API|setFunctionStatus|{int(fid)}|{1 if on else 0}")
+        except OSError as e:
+            raise ValueError("Can't reach QLC+. Is it running with its web page on (--web)?") from e
 
     def handle(self, op: str, **args):
         fn = getattr(self, "op_" + op, None)
@@ -565,11 +624,17 @@ class StudioDesk:
         if not self.rig.lights:
             raise ValueError("Patch at least one light first.")
         if not replace and self.show_path.exists():
-            made = len(re.findall(r"<Function\b", self.show_path.read_text(errors="replace")))
+            made = len(re.findall(r'<Function\b(?=[^>]*\bType=)(?![^>]*Path="Lumiere)', self.show_path.read_text(errors="replace")))
             if made:
                 return {"confirm": f"The QLC+ show has {made} scenes, chases or other functions made in QLC+. "
                                    "Studio's show replaces them (the old show is saved first). Go ahead?"}
         out = write_show(self.rig, self.show_path, self.fixtures_dir)
+        self.applied = out.get("ids") or {}
+        if self.set_pools and out.get("counts"):
+            # Lumière Link now picks from exactly these slots, and sends the notes
+            # for the hit, roll and blackout buttons that are switched on
+            show = self.rig.show
+            self.set_pools(out["counts"], {k: show.get(k, True) for k in ("hit", "roll", "blackout")})
         self.link.close()
         out["restarted"] = bool(self.restart())
         if not out["restarted"]:

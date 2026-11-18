@@ -283,6 +283,18 @@ select:disabled { color: var(--tick); }
 /* ---------- Lumière Studio sheet ---------- */
 .sheet.studio { width: 1080px; height: 720px; }
 .studio .foot-btns .btn { white-space: nowrap; }
+.showrows { display: grid; gap: 6px; }
+.showrow { display: grid; grid-template-columns: 150px minmax(0, 1fr) 190px; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 10px;
+  background: linear-gradient(180deg, #232321, #1D1D1C); box-shadow: inset 0 1px 0 rgba(240,237,229,.05); }
+.showrow .nm { font-weight: 600; color: var(--ivory); }
+.showrow .sub { font-size: 11px; color: var(--unit); }
+.fxs { display: flex; flex-wrap: wrap; gap: 6px; }
+.fx { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 3px; border-radius: 8px; background: var(--well); font-size: 12px; color: var(--value); }
+.fx .mini { padding: 2px 7px; font-size: 10px; }
+.fx .mini:disabled { opacity: .35; cursor: default; }
+.fxx { border: 0; background: none; color: var(--unit); font-size: 11px; padding: 0 3px; }
+.fxx:hover { color: var(--ember); }
+.extras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding-top: 6px; }
 .st-head-mid { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 .qlcpill { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700; color: var(--unit); }
 .qlcpill .led { width: 8px; height: 8px; border-radius: 50%; background: var(--track); }
@@ -655,6 +667,7 @@ body { padding: 0 !important; margin: 0; }
           <button data-tab="lights" aria-current="step">1 · Lights</button>
           <button data-tab="patch">2 · Patch</button>
           <button data-tab="test">3 · Test &amp; send to QLC+</button>
+          <button data-tab="show">4 · Show</button>
         </nav>
         <div class="st-head-mid">
           <span class="qlcpill" id="stQlc"><span class="led"></span><span id="stQlcTxt">QLC+</span></span>
@@ -1431,6 +1444,7 @@ body { padding: 0 !important; margin: 0; }
     body.classList.toggle("one", ST.tab !== "lights");
     if (ST.tab === "lights") body.innerHTML = stLightsTab();
     else if (ST.tab === "patch") body.innerHTML = stPatchTab();
+    else if (ST.tab === "show") body.innerHTML = stShowTab();
     else body.innerHTML = stTestTab();
   }
 
@@ -1570,7 +1584,7 @@ body { padding: 0 !important; margin: 0; }
     const targets = [["all", "All lights"], ...s.groups.map(g => ["g:" + g, g])];
     const ap = ST.applied;
     const applied = ap ? (ap.restarted
-        ? `<div class="st-note ok"><b>Sent.</b> QLC+ restarted with ${s.rig.lights.length} lights and the light files ${esc(ap.fixtures.join(", "))}. ${ap.node_output ? `Art-Net goes to the Node (${esc(ap.node_output)}), all 512 channels.` : "<b>The Node (2.0.0.10) isn't reachable from here</b>: set QLC+'s output to Art-Net, IP 2.0.0.10 by hand."}${ap.backup ? ` The old show is saved as ${esc(ap.backup.split("/").pop())}.` : ""}</div>`
+        ? `<div class="st-note ok"><b>Sent.</b> QLC+ restarted with ${s.rig.lights.length} lights and the light files ${esc(ap.fixtures.join(", "))}. ${ap.node_output ? `Art-Net goes to the Node (${esc(ap.node_output)}), all 512 channels.` : "<b>The Node (2.0.0.10) isn't reachable from here</b>: set QLC+'s output to Art-Net, IP 2.0.0.10 by hand."}${ap.counts && Object.values(ap.counts).some(Boolean) ? ` The show is wired to Lumière Link: ${Object.entries(ap.counts).filter(([, n]) => n).map(([p, n]) => `${esc(s.show.labels[p])} ${n}`).join(", ")}.` : ""}${ap.backup ? ` The old show is saved as ${esc(ap.backup.split("/").pop())}.` : ""}</div>`
         : `<div class="st-note warn"><b>Written.</b> ${esc(ap.note || "")}</div>`) : "";
     return `<div class="well st-pane">
       <h3>Test the rig</h3>
@@ -1583,6 +1597,38 @@ body { padding: 0 !important; margin: 0; }
       <h3 style="margin-top:8px">Send to QLC+</h3>
       <p>Writes a light file for each kind of light and patches every light in QLC+'s show (${esc(s.show)}), with a fixture group for each group. Art-Net is set to go to the Node (2.0.0.10), and the old show is saved first. On the Resident, QLC+ restarts by itself with the new patch.</p>
       ${applied}
+    </div>`;
+  }
+
+  // 4 · Show: what plays in each kind of section
+  const SHOW_ORDER = ["intro", "verse", "build", "pre_drop", "drop", "breakdown", "bridge", "outro"];
+  const SHOW_HINT = { intro: "the track starting", verse: "verses", build: "the build-up", pre_drop: "just before the drop",
+    drop: "the drop", breakdown: "breakdowns", bridge: "bridges", outro: "the track ending" };
+  function stShowTab() {
+    const sh = ST.s.show;
+    if (!sh || !sh.ready) return `<div class="well st-pane"><h3>Show</h3><p>Patch your lights in step 2 first.</p></div>`;
+    const byKey = Object.fromEntries(sh.gallery.map(g => [g.key, g]));
+    const applied = sh.applied || {};
+    const rows = SHOW_ORDER.map(pool => {
+      const keys = sh.pools[pool] || [];
+      const ids = applied[pool] || [];
+      const chips = keys.map((k, i) => {
+        const fid = ids[i];
+        const playing = ST.playing === fid && fid;
+        return `<span class="fx"><button class="mini${playing ? " on" : ""}" data-st="fxplay" data-fid="${fid ?? ""}"${fid ? "" : " disabled title=\"Send to QLC+ first\""}>${playing ? "■" : "▶"}</button>${esc(byKey[k]?.label || k)}<button class="fxx" data-st="fxrm" data-pool="${pool}" data-i="${i}" aria-label="Remove">✕</button></span>`;
+      }).join("");
+      const suits = sh.gallery.filter(g => g.suits.includes(pool)), rest = sh.gallery.filter(g => !g.suits.includes(pool));
+      const opt = g => `<option value="${esc(g.key)}">${esc(g.label)}</option>`;
+      return `<div class="showrow"><div><div class="nm">${esc(sh.labels[pool])}</div><div class="sub">${SHOW_HINT[pool]}</div></div>
+        <div class="fxs">${chips || `<span class="sub">Nothing: this section keeps the last look</span>`}</div>
+        <select data-pool="${pool}" class="fxadd"><option value="">+ Add…</option><optgroup label="Suits ${esc(sh.labels[pool].toLowerCase())}">${suits.map(opt).join("")}</optgroup><optgroup label="Everything else">${rest.map(opt).join("")}</optgroup></select></div>`;
+    }).join("");
+    const extra = (k, label, desc) => `<button class="switch" role="switch" aria-checked="${!!sh[k]}" data-st="extra" data-k="${k}"><span class="txt"><span class="t">${label}</span><span class="desc">${desc}</span></span><span class="k"></span></button>`;
+    return `<div class="well st-pane">
+      <div class="btnrow"><h3 style="margin-right:auto">What plays in each section</h3><button class="btn" data-st="autofill">Fill from my lights</button></div>
+      <p>Lumière Link picks one of these whenever a section starts, never the same one twice in a row, and QLC+ plays it on the beat. Press <b>Send to QLC+</b> after changes; then ▶ previews a look on the lights.</p>
+      <div class="showrows">${rows}</div>
+      <div class="extras">${extra("hit", "Hit flash", "A white flash on every hit before the drop")}${extra("roll", "Snare roll strobe", "Strobe from the start of the roll to the drop")}${extra("blackout", "Blackout before the drop", "All off for the gap before the drop (set its length in Sequences → Drop)")}</div>
     </div>`;
   }
 
@@ -1665,10 +1711,32 @@ body { padding: 0 !important; margin: 0; }
       ST.picked = sel; ST.target = "pick"; renderStudio(); await stApplyLook();
     }
     else if (what === "look") { ST.look = b.dataset.k; await stApplyLook(); renderStudio(); }
+    else if (what === "autofill") {
+      const has = Object.values(s.show.pools || {}).some(k => k.length);
+      if (has && !confirm("Replace what's in every section with looks made from your lights?")) return;
+      if (await stDo("auto_fill")) { renderStudio(); toast("Filled. Press Send to QLC+ to use it."); }
+    }
+    else if (what === "fxrm") {
+      const pool = b.dataset.pool, keys = [...(s.show.pools[pool] || [])]; keys.splice(+b.dataset.i, 1);
+      if (await stDo("set_pool", { pool, keys })) renderStudio();
+    }
+    else if (what === "fxplay") {
+      const fid = +b.dataset.fid; if (!fid) return;
+      if (ST.playing === fid) { await stDo("play", { fid, on: false }); ST.playing = null; }
+      else { if (ST.playing) await stDo("play", { fid: ST.playing, on: false }); await stDo("play", { fid, on: true }); ST.playing = fid; }
+      renderStudio();
+    }
+    else if (what === "extra") { if (await stDo("set_extra", { name: b.dataset.k, on: b.getAttribute("aria-checked") !== "true" })) renderStudio(); }
   });
   $("stBody").addEventListener("change", async e => {
     const t = e.target;
     if (t.id === "stTpl") return stSyncNewForm();
+    if (t.classList.contains("fxadd")) {
+      if (!t.value) return;
+      const pool = t.dataset.pool, keys = [...(ST.s.show.pools[pool] || []), t.value];
+      if (await stDo("set_pool", { pool, keys })) renderStudio();
+      return;
+    }
     const tr = t.closest("tr[data-id]");
     if (tr) {
       const field = t.classList.contains("lname") ? "name" : t.classList.contains("lgroup") ? "group" : t.classList.contains("laddr") ? "address" : null;

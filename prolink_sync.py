@@ -230,7 +230,12 @@ class ClockPLL:
 
 
 class MidiClockOutput:
-    def __init__(self, port_name: str, use_existing: bool, transport: bool):
+    """MIDI clock (24 ticks a beat) on a port. With `fast_port`, a second port gets
+    the same clock at double speed, two ticks for each one: QLC+ counts 24 ticks as
+    a beat, so its "beats" become 8th notes, still locked to the DJ, and its chases
+    can step faster than once a beat (Lumière Studio uses this)."""
+
+    def __init__(self, port_name: str, use_existing: bool, transport: bool, fast_port: Optional[str] = None):
         import mido  # imported lazily so --monitor works without MIDI deps
 
         from phrases import MIDI_LOCK
@@ -241,18 +246,22 @@ class MidiClockOutput:
             self.port = mido.open_output(port_name)
         else:
             self.port = mido.open_output(port_name, virtual=True)
+        self.fast = mido.open_output(fast_port, virtual=True) if fast_port else None
         self.transport = transport
         self.running = False
         self._closed = False
-        log.info("MIDI clock on port %r", port_name)
+        log.info("MIDI clock on port %r%s", port_name, f" (and at double speed on {fast_port!r})" if fast_port else "")
 
-    def _send(self, status: int) -> None:
+    def _send(self, status: int, fast_times: int = 1) -> None:
         with self._lock:
             if not self._closed:
-                self.port.send(self._mido.Message.from_bytes([status]))
+                msg = self._mido.Message.from_bytes([status])
+                self.port.send(msg)
+                for _ in range(fast_times if self.fast else 0):
+                    self.fast.send(msg)
 
     def clock(self) -> None:
-        self._send(MIDI_CLOCK)
+        self._send(MIDI_CLOCK, fast_times=2)
 
     def start(self) -> None:
         if self.transport and not self.running:
@@ -269,6 +278,8 @@ class MidiClockOutput:
             self.stop()
             self._closed = True
             self.port.close()
+            if self.fast:
+                self.fast.close()
 
 
 class LinkOutput:

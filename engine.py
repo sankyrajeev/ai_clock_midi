@@ -40,6 +40,7 @@ from projects import NAME_TIP, ProjectManager, ProjectStore
 log = logging.getLogger("prolink_sync.app")
 
 CLOCK_PORT, CUE_PORT = "Lumiere Clock", "Lumiere Cues"
+STUDIO_CLOCK_PORT = "Lumiere Studio Clock"   # double-speed clock for QLC+ (Resident)
 try:
     VERSION = Path(__file__).with_name("VERSION").read_text().strip()
 except OSError:
@@ -126,7 +127,8 @@ class LumiereEngine:
 
     def start(self) -> None:
         try:
-            self.clock_out = ps.MidiClockOutput(CLOCK_PORT, False, True)
+            self.clock_out = ps.MidiClockOutput(CLOCK_PORT, False, True,
+                                                fast_port=STUDIO_CLOCK_PORT if sys.platform.startswith("linux") else None)
             self.cue_out = CueMidi(CUE_PORT, False, gate=self._has_phrases, pools=self.manager.pools)
         except Exception as e:  # noqa: BLE001 - CoreMIDI errors come in many shapes
             self.errors["midi"] = f"Couldn't create the MIDI inputs for Lightkey ({e})."
@@ -438,8 +440,29 @@ class LumiereEngine:
         """Lumière Studio (lights set up through QLC+): see studio.StudioDesk."""
         if self.studio is None:
             from studio import StudioDesk
-            self.studio = StudioDesk(self.data_dir)
+            self.studio = StudioDesk(self.data_dir, set_pools=self._studio_pools)
         return self.studio.handle(op, **args)
+
+    def _studio_pools(self, counts: dict, extras: Optional[dict] = None) -> None:
+        """Studio sent a show to QLC+: each pool gets as many sequences as it has
+        buttons there, picked in shuffle order (never the same button twice in a
+        row, which would switch a QLC+ toggle button off)."""
+        def change(cfg):
+            cfg["mode"] = "shuffle"
+            cfg["pair_builds_with_drops"] = False
+            pools = cfg.setdefault("pools", {})
+            for pool, count in counts.items():
+                if pool in pl.POOL_CHANNELS:
+                    n = max(0, min(pl.MAX_SEQUENCES, int(count)))
+                    # a pool's own pick mode would override shuffle: drop it
+                    pools[pool] = {**pools[pool], "count": n, "mode": "shuffle"} if isinstance(pools.get(pool), dict) else n
+            extras_ = extras or {}
+            if extras_.get("hit") or extras_.get("roll"):
+                cfg["fills"] = True
+            bo = cfg.setdefault("blackout", {"mode": "off", "beats": 1.0})
+            if extras_.get("blackout") and bo.get("mode", "off") == "off":
+                bo["mode"] = "music"     # a length set by hand is kept
+        self._update_config(change)
 
     def do_set_live(self, on: bool) -> None:
         self.live = bool(on)

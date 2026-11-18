@@ -141,6 +141,8 @@ sudo tee /etc/systemd/system/lumiere-qlcplus.service >/dev/null <<UNIT
 Description=QLC+ for Lumière Resident (MIDI in from Lumière Link, Art-Net out to the Node)
 After=$QLC_AFTER
 Wants=$QLC_AFTER
+# QLC+ finds MIDI ports only when it starts: restart it with Lumière Link
+PartOf=lumiere-link.service
 
 [Service]
 User=$ME
